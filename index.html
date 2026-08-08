@@ -242,8 +242,10 @@ td.r,th.r{text-align:right}
     </div>
     <button class="navbtn active" data-view="pulse" data-label="Pulse"><span class="ic">◉</span>Pulse</button>
     <button class="navbtn" data-view="pnl" data-label="P&amp;L"><span class="ic">Σ</span>P&amp;L</button>
+    <button class="navbtn" data-view="targets" data-label="Targets"><span class="ic">⊕</span>Targets</button>
     <button class="navbtn" data-view="team" data-label="Team"><span class="ic">⬡</span>Team</button>
     <button class="navbtn" data-view="forecast" data-label="Forecast"><span class="ic">↗</span>Forecast</button>
+    <button class="navbtn" data-view="simulator" data-label="Simulator"><span class="ic">≋</span>Simulator</button>
     <button class="navbtn" data-view="insights" data-label="Insights"><span class="ic">✦</span>Insights</button>
     <button class="navbtn" data-view="sale" data-label="New booking"><span class="ic">＋</span>Booking</button>
     <button class="navbtn" data-view="expense" data-label="New expense"><span class="ic">₹</span>Expense</button>
@@ -365,6 +367,63 @@ td.r,th.r{text-align:right}
         <div class="formfoot">
           <button class="btn" id="saveEmployee">Add member</button>
           <span class="hint">Name must match the "Sales person" typed on bookings — that's how fee credit and incentives are matched.</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ TARGETS ═══ -->
+    <section class="view" id="view-targets">
+      <div class="grid kpis" id="tgtCards"></div>
+      <div class="grid two section">
+        <div class="card">
+          <h3>Project-wise · achieved vs expected-by-now vs FY target</h3>
+          <div class="chartbox" style="height:300px"><canvas id="chTarget"></canvas></div>
+        </div>
+        <div class="card">
+          <h3>Cumulative sales value — actual vs target line</h3>
+          <div class="chartbox" style="height:300px"><canvas id="chCumTarget"></canvas></div>
+        </div>
+      </div>
+      <div class="card section">
+        <h3>Target vs achievement — detail</h3>
+        <div style="overflow-x:auto"><table id="tblTarget"></table></div>
+        <p class="hint" style="margin-top:10px">"Expected by now" prorates the FY target by time elapsed. Ahead/behind is measured against that pace line, not the year-end number — so a project can be at 40% of target in August and still be perfectly on track.</p>
+      </div>
+    </section>
+
+    <!-- ═══ SIMULATOR ═══ -->
+    <section class="view" id="view-simulator">
+      <div class="grid two">
+        <div class="card">
+          <h3>Business simulator — move the levers</h3>
+          <div class="formgrid">
+            <div class="field"><label>Bookings / month</label><input type="number" id="simBk" min="0" step="1">
+              <input type="range" id="simBkR" min="0" max="120" step="1" style="width:100%;margin-top:8px"></div>
+            <div class="field"><label>Avg ticket size (₹)</label><input type="number" id="simTicket" min="0" step="100000">
+              <input type="range" id="simTicketR" min="2000000" max="20000000" step="100000" style="width:100%;margin-top:8px"></div>
+            <div class="field"><label>Blended commission %</label><input type="number" id="simComm" min="0" max="15" step="0.05"></div>
+            <div class="field"><label>Marketing cost / booking (₹)</label><input type="number" id="simCPB" min="0" step="5000"></div>
+            <div class="field"><label>Team headcount</label><input type="number" id="simHead" min="0" step="1">
+              <input type="range" id="simHeadR" min="0" max="40" step="1" style="width:100%;margin-top:8px"></div>
+            <div class="field"><label>Avg monthly salary (₹)</label><input type="number" id="simSalary" min="0" step="1000"></div>
+            <div class="field"><label>Incentive % of sale value</label><input type="number" id="simInc" min="0" max="2" step="0.01"></div>
+            <div class="field"><label>Cancellation rate %</label><input type="number" id="simCancel" min="0" max="50" step="0.5"></div>
+            <div class="field"><label>Fixed overheads / month (₹)</label><input type="number" id="simOverhead" min="0" step="10000"></div>
+          </div>
+          <div class="formfoot">
+            <button class="btn ghost" id="simReset">Reset to current run-rate</button>
+            <span class="hint">Defaults are your actual numbers for the selected period. Change anything — results update live.</span>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Simulated outcome — per month &amp; FY landing</h3>
+          <div class="grid kpis" id="simOut" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))"></div>
+          <div class="section">
+            <h3>Where the simulated fee rupee goes</h3>
+            <div id="simStack" style="display:flex;height:26px;border-radius:8px;overflow:hidden;border:1px solid var(--line)"></div>
+            <div id="simStackLegend" class="hint" style="margin-top:10px"></div>
+          </div>
+          <div id="simVerdict" class="section"></div>
         </div>
       </div>
     </section>
@@ -1054,7 +1113,165 @@ function renderAll() {
   renderKPIs(A); renderHealth(A); renderCharts(A);
   renderSourceTable(A); renderSiteTable(A); renderOverheads(A);
   renderPnl(A); renderTeam(A);
+  renderTargets(A); renderSimulator(A);
   renderForecast(A); renderInsights(A); renderProjects();
+}
+
+/* ════════════════ TARGETS ════════════════ */
+function renderTargets(A) {
+  const withT = A.pacing.filter(p => p.tR > 0);
+  const tTot = withT.reduce((a,p)=>a+p.tR,0);
+  const achTot = A.pacing.reduce((a,p)=>a+p.rev,0);
+  const expTot = tTot * A.elapsed;
+  const onTrack = withT.filter(p=>p.pace>=0.95).length;
+  const cards = [
+    ['FY target (GDV)', tTot, fmt, withT.length + ' projects with targets', null, '#F0BC52'],
+    ['Achieved (GDV)', achTot, fmt, tTot?pct(achTot/tTot)+' of FY target':'—', null, '#3CE4A4'],
+    ['Expected by now', expTot, fmt, pct(A.elapsed)+' of year elapsed', null, '#5BE3FF'],
+    ['Pace vs time', tTot?achTot/expTot:null, v=>v==null||!isFinite(v)?'–':pct(v), achTot>=expTot?'ahead of the clock':'behind the clock', null, achTot>=expTot?'#3CE4A4':'#FF6F62', achTot>=expTot?'up':'down'],
+    ['Gap to date', achTot-expTot, fmt, achTot>=expTot?'surplus over pace line':'shortfall vs pace line', null, '#A18BFF', achTot>=expTot?'up':'down'],
+    ['On track', onTrack, v=>v==null?'–':Math.round(v)+' / '+withT.length, 'projects at ≥95% pace', null, '#F2B650']
+  ];
+  $('tgtCards').innerHTML = cards.map(([l,,,d,,,cls]) =>
+    `<div class="card kpi"><div class="lbl">${l}</div><div class="val num">–</div><div class="delta ${cls||'flat'}">${d}</div></div>`).join('');
+  document.querySelectorAll('#tgtCards .val').forEach((el,i) => countUp(el, cards[i][1], cards[i][2]));
+
+  killChart('tgt');
+  charts.tgt = new Chart($('chTarget'), {
+    type:'bar',
+    data:{ labels: A.pacing.map(p=>p.name),
+      datasets:[
+        { label:'Achieved', data:A.pacing.map(p=>p.rev), backgroundColor:'rgba(240,188,82,.75)', borderColor:'#F0BC52', borderWidth:1, borderRadius:5 },
+        { label:'Expected by now', data:A.pacing.map(p=>p.tR*A.elapsed), backgroundColor:'rgba(91,227,255,.30)', borderColor:'#5BE3FF', borderWidth:1, borderRadius:5 },
+        { label:'FY target', data:A.pacing.map(p=>p.tR), backgroundColor:'rgba(125,155,215,.14)', borderColor:'rgba(125,155,215,.5)', borderWidth:1, borderRadius:5 }
+      ]},
+    options:{ maintainAspectRatio:false,
+      plugins:{ legend:{position:'bottom', labels:{usePointStyle:true, pointStyle:'rectRounded', boxWidth:8, padding:16}},
+        tooltip:{ backgroundColor:'rgba(10,15,30,.95)', borderColor:'rgba(240,188,82,.35)', borderWidth:1, padding:12,
+          callbacks:{label:c=>' '+c.dataset.label+': '+fmt(c.raw)} } },
+      scales:{ x:{ grid:{display:false} },
+        y:{ ticks:{ callback:v=>fmt(v), font:{family:"'JetBrains Mono', monospace", size:10} } } } }
+  });
+
+  // cumulative actual vs straight-line target
+  let cum = 0;
+  const cumActual = A.series.map(m => { cum += m.revenue; return new Date(m.y, m.m, 1) <= new Date() ? cum : null; });
+  const cumTarget = A.series.map((m,i) => tTot * (i+1) / 12);
+  killChart('cum');
+  const cctx = $('chCumTarget').getContext('2d');
+  const gCum = cctx.createLinearGradient(0,0,0,300);
+  gCum.addColorStop(0,'rgba(60,228,164,.30)'); gCum.addColorStop(1,'rgba(60,228,164,.02)');
+  charts.cum = new Chart($('chCumTarget'), {
+    data:{ labels:A.series.map(m=>m.label), datasets:[
+      { type:'line', label:'Cumulative actual', data:cumActual, borderColor:'#3CE4A4', backgroundColor:gCum, fill:true, tension:.3, pointRadius:2.5, borderWidth:2 },
+      { type:'line', label:'Target pace line', data:cumTarget, borderColor:'rgba(240,188,82,.85)', borderDash:[7,6], pointRadius:0, borderWidth:2 }
+    ]},
+    options:{ maintainAspectRatio:false,
+      plugins:{ legend:{position:'bottom', labels:{usePointStyle:true, pointStyle:'rectRounded', boxWidth:8, padding:16}},
+        tooltip:{ backgroundColor:'rgba(10,15,30,.95)', borderColor:'rgba(240,188,82,.35)', borderWidth:1, padding:12,
+          callbacks:{label:c=>' '+c.dataset.label+': '+fmt(c.raw)} } },
+      scales:{ x:{ grid:{display:false} },
+        y:{ ticks:{ callback:v=>fmt(v), font:{family:"'JetBrains Mono', monospace", size:10} } } } }
+  });
+
+  $('tblTarget').innerHTML = `<tr><th>Project</th><th class="r">FY target</th><th class="r">Achieved</th><th class="r">%</th><th class="r">Expected by now</th><th class="r">Gap vs pace</th><th class="r">Bookings</th><th class="r">Bk target</th><th class="r">Run-rate needed / mo</th><th class="r">Verdict</th></tr>` +
+    A.pacing.map(p => {
+      const exp = p.tR * A.elapsed;
+      const gap = p.rev - exp;
+      const mLeft = Math.max(1, Math.round(12 * (1 - A.elapsed)));
+      const need = p.tR > 0 ? Math.max(0, p.tR - p.rev) / mLeft : null;
+      const verdict = p.pace==null?'<span class="pill warn">no target</span>'
+        : p.pace>=0.95?'<span class="pill good">on track</span>'
+        : p.pace>=0.7?'<span class="pill warn">watch</span>'
+        : '<span class="pill risk">behind</span>';
+      return `<tr><td>${esc(p.name)}</td><td class="r num">${p.tR?fmt(p.tR):'–'}</td><td class="r num">${fmt(p.rev)}</td>
+        <td class="r num">${p.achievedPct!=null?pct(p.achievedPct):'–'}</td><td class="r num">${p.tR?fmt(exp):'–'}</td>
+        <td class="r num" style="color:${gap>=0?'var(--jade)':'var(--ember)'}">${p.tR?fmt(gap):'–'}</td>
+        <td class="r num">${p.bk}</td><td class="r num">${p.tB||'–'}</td>
+        <td class="r num">${need!=null?fmt(need):'–'}</td><td class="r">${verdict}</td></tr>`;
+    }).join('');
+}
+
+/* ════════════════ SIMULATOR ════════════════ */
+let simCtx = null;
+function renderSimulator(A) {
+  const P = A.pnl;
+  const mNow = Math.max(1, A.activeMonths.length);
+  const blendedComm = A.revenue > 0 ? (A.fee / A.revenue) * 100 : 5;
+  simCtx = {
+    fyToDateFee: A.fyToDateFee,
+    monthsLeft: Math.max(0, 12 - A.activeMonths.length),
+    feeTarget: A.pacing.reduce((a,p)=>a+p.tFee,0),
+    defaults: {
+      simBk: Math.max(1, Math.round(P.bkAll / mNow)),
+      simTicket: Math.round((A.bookings ? A.revenue/A.bookings : 7000000) / 1e5) * 1e5,
+      simComm: Number(blendedComm.toFixed(2)),
+      simCPB: Math.round((P.bkAll ? P.variableSelling/P.bkAll : 150000) / 1000) * 1000,
+      simHead: A.roster.length || 8,
+      simSalary: Math.round((A.roster.length ? A.roster.reduce((a,e)=>a+e.salary,0)/A.roster.length : 42000) / 500) * 500,
+      simInc: A.roster.length ? Number((A.roster.reduce((a,e)=>a+e.incPct,0)/A.roster.length).toFixed(2)) : 0.10,
+      simCancel: 5,
+      simOverhead: Math.round(((P.mktOverhead + P.otherCost) / P.mip) / 1000) * 1000
+    }
+  };
+  resetSim();
+}
+function resetSim() {
+  if (!simCtx) return;
+  Object.entries(simCtx.defaults).forEach(([id, v]) => {
+    if ($(id)) $(id).value = v;
+    if ($(id + 'R')) $(id + 'R').value = v;
+  });
+  runSim();
+}
+function runSim() {
+  if (!simCtx) return;
+  const V = id => Math.max(0, Number($(id).value) || 0);
+  const bkGross = V('simBk'), cancel = V('simCancel')/100;
+  const bk = bkGross * (1 - cancel);
+  const ticket = V('simTicket'), comm = V('simComm')/100;
+  const gdv = bk * ticket;
+  const feeM = gdv * comm;
+  const varM = bkGross * V('simCPB');            // marketing is spent on cancelled deals too
+  const peopleM = V('simHead') * V('simSalary') + gdv * V('simInc')/100;
+  const ohM = V('simOverhead');
+  const profitM = feeM - varM - peopleM - ohM;
+  const margin = feeM > 0 ? profitM / feeM : null;
+  const feePerBk = bk > 0 ? feeM / bk : 0;
+  const varPerBk = bkGross > 0 ? varM / bkGross : 0;
+  const fixedM = peopleM + ohM;
+  const beBk = feePerBk > varPerBk ? Math.ceil(fixedM / (feePerBk - varPerBk)) : null;
+  const fyLanding = simCtx.fyToDateFee + simCtx.monthsLeft * feeM;
+  const fyProfit12 = profitM * 12;
+
+  const out = [
+    ['Fee income / mo', feeM, fmt, fmt(gdv)+' GDV · '+bk.toFixed(1)+' net bookings'],
+    ['Operating profit / mo', profitM, fmt, margin!=null?pct(margin)+' margin':'–', profitM>=0?'up':'down'],
+    ['Annualised profit', fyProfit12, fmt, 'at this run-rate'],
+    ['FY fee landing', fyLanding, fmt, simCtx.monthsLeft+' months simulated forward'],
+    ['Break-even bookings', beBk, v=>v==null?'–':Math.round(v)+' / mo', 'to cover fixed costs'],
+    ['Cost per booking (all-in)', bkGross>0?(varM+peopleM+ohM)/bkGross:null, v=>v==null||!isFinite(v)?'–':fmt(v), 'marketing + people + overheads']
+  ];
+  $('simOut').innerHTML = out.map(([l,,,d,cls]) =>
+    `<div class="card kpi"><div class="lbl">${l}</div><div class="val num" style="font-size:20px">–</div><div class="delta ${cls||'flat'}">${d}</div></div>`).join('');
+  document.querySelectorAll('#simOut .val').forEach((el,i) => el.textContent = out[i][2](out[i][1]));
+
+  const segs = [
+    ['Marketing', varM, '#FF6F62'], ['People', peopleM, '#A18BFF'],
+    ['Overheads', ohM, '#F2B650'], ['Profit', Math.max(0, profitM), '#3CE4A4']
+  ];
+  const denom = Math.max(feeM, varM + peopleM + ohM);
+  $('simStack').innerHTML = denom > 0 ? segs.filter(s=>s[1]>0).map(s =>
+    `<div style="width:${(s[1]/denom*100).toFixed(1)}%;background:${s[2]};opacity:.85" title="${s[0]}: ${fmt(s[1])}"></div>`).join('') : '';
+  $('simStackLegend').innerHTML = segs.map(s =>
+    `<span style="color:${s[2]}">■</span> ${s[0]} ${fmt(s[1])} (${feeM>0?pct(s[1]/feeM):'–'})`).join(' &nbsp; ');
+
+  let verdict;
+  if (profitM < 0) verdict = ['risk', `This configuration loses ${fmt(-profitM)} every month. You need ${beBk??'more'} bookings/month to break even, or a lower cost base.`];
+  else if (simCtx.feeTarget > 0 && fyLanding < simCtx.feeTarget)
+    verdict = ['warn', `Profitable, but lands at ${fmt(fyLanding)} vs the ${fmt(simCtx.feeTarget)} FY fee target (${pct(fyLanding/simCtx.feeTarget)}). Lift bookings/month or ticket size to close ${fmt(simCtx.feeTarget-fyLanding)}.`];
+  else verdict = ['good', `Profitable at ${pct(margin)} margin${simCtx.feeTarget>0?` and beats the FY fee target by ${fmt(fyLanding-simCtx.feeTarget)}`:''}. Stress-test it: raise cancellation and marketing cost 20% and see if it still holds.`];
+  $('simVerdict').innerHTML = `<div class="insight ${verdict[0]}" style="margin:0"><h4>Simulator verdict</h4><p>${verdict[1]}</p></div>`;
 }
 
 function renderPnl(A) {
@@ -1311,12 +1528,34 @@ function renderForecast(A) {
   const tFeeTot = A.pacing.reduce((a,p)=>a+p.tFee,0);
   const monthsLeft = Math.max(0, 12 - A.activeMonths.length);
   const needed = monthsLeft>0 ? Math.max(0,(tFeeTot - A.fyToDateFee))/monthsLeft : 0;
-  $('fcCards').innerHTML = [
-    ['Fee income · next 3 months', fmt(A.fc.next.reduce((a,b)=>a+b,0)), 'least-squares trend'],
-    ['FY fee landing (projected)', fmt(A.fcFyTotal), tFeeTot? pct(A.fcFyTotal/tFeeTot)+' of fee target' : 'no targets set'],
-    ['FY fee target (all sites)', tFeeTot?fmt(tFeeTot):'–', 'GDV targets × commission rate'],
-    ['Fee run-rate needed', monthsLeft? fmt(needed):'–', monthsLeft+' months remain']
-  ].map(([l,v,d])=>`<div class="card kpi"><div class="lbl">${l}</div><div class="val num">${v}</div><div class="delta flat">${d}</div></div>`).join('');
+
+  // scenario band: trend ± typical monthly deviation, projected over remaining months
+  const proj = i => i < 3 ? A.fc.next[i] : (A.fc.next[2] || 0);
+  let base = A.fyToDateFee, cons = A.fyToDateFee, opti = A.fyToDateFee;
+  for (let i = 0; i < monthsLeft; i++) {
+    base += Math.max(0, proj(i));
+    cons += Math.max(0, proj(i) - A.fc.band);
+    opti += Math.max(0, proj(i) + A.fc.band);
+  }
+  let likely = null;
+  if (tFeeTot > 0) {
+    likely = tFeeTot <= cons ? ['good','Highly likely — even the conservative path clears it']
+      : tFeeTot <= base ? ['good','Likely — the base trend clears the target']
+      : tFeeTot <= opti ? ['warn','Possible — needs the optimistic path to hold']
+      : ['risk','Unlikely on trend — intervention needed'];
+  }
+
+  $('fcCards').innerHTML = ([
+    ['Fee income · next 3 months', A.fc.next.reduce((a,b)=>a+b,0), fmt, 'least-squares trend'],
+    ['Conservative FY landing', cons, fmt, 'trend − typical deviation'],
+    ['Base FY landing', base, fmt, tFeeTot? pct(base/tFeeTot)+' of fee target' : 'no targets set'],
+    ['Optimistic FY landing', opti, fmt, 'trend + typical deviation'],
+    ['FY fee target', tFeeTot||null, v=>v==null?'–':fmt(v), 'GDV targets × commission rate'],
+    ['Fee run-rate needed', monthsLeft?needed:null, v=>v==null?'–':fmt(v), monthsLeft+' months remain']
+  ]).map(([l,v,f,d])=>`<div class="card kpi"><div class="lbl">${l}</div><div class="val num">${f(v)}</div><div class="delta flat">${d}</div></div>`).join('')
+  + (likely ? `<div class="card kpi" style="border-color:rgba(240,188,82,.3)"><div class="lbl">Target verdict</div>
+      <div class="val" style="font-size:16px;margin-top:12px"><span class="pill ${likely[0]}">${likely[1].split(' — ')[0]}</span></div>
+      <div class="delta flat" style="margin-top:8px">${likely[1].split(' — ')[1]||''}</div></div>` : '');
 
   const actual = A.activeMonths.map(m=>m.fee);
   const labels = [...A.series.map(m=>m.label)];
@@ -1436,6 +1675,14 @@ $('fFY').onchange = e => { F.fy = Number(e.target.value); renderAll(); };
 $('fMonth').onchange = e => { F.month = e.target.value; renderAll(); };
 $('fProject').onchange = e => { F.project = e.target.value; renderAll(); };
 $('refreshBtn').onclick = loadData;
+
+// simulator: number ↔ slider sync + live recompute
+['simBk','simTicket','simComm','simCPB','simHead','simSalary','simInc','simCancel','simOverhead'].forEach(id => {
+  const n = $(id), r = $(id + 'R');
+  if (n) n.oninput = () => { if (r) r.value = n.value; runSim(); };
+  if (r) r.oninput = () => { n.value = r.value; runSim(); };
+});
+$('simReset').onclick = resetSim;
 
 /* ════════════════ DEMO DATA ════════════════ */
 function demoData() {
