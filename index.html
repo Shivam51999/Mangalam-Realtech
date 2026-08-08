@@ -164,7 +164,7 @@ td.r,th.r{text-align:right}
 
       <div class="grid two section">
         <div class="card">
-          <h3>Revenue vs spend · monthly</h3>
+          <h3>Sales value · fee income · spend — monthly</h3>
           <div class="chartbox"><canvas id="chRevExp"></canvas></div>
         </div>
         <div class="card health">
@@ -196,7 +196,7 @@ td.r,th.r{text-align:right}
       <div class="card section">
         <h3>Site P&amp;L — with central cost allocated by revenue share</h3>
         <div style="overflow-x:auto"><table id="tblSite"></table></div>
-        <p class="hint" style="margin-top:10px">Central marketing &amp; CP-sourcing costs are spread across sites in proportion to each site's revenue for the period, so every site carries its fair share of the machine that feeds it.</p>
+        <p class="hint" style="margin-top:10px">Fee income = agreement value × the project's commission rate (4.5% Aikyam, 5% others — override per project in the master). Central marketing &amp; CP-sourcing costs are spread across sites in proportion to each site's fee income, so contribution reflects what each site truly earns Realtech.</p>
       </div>
 
       <div class="card section">
@@ -209,9 +209,9 @@ td.r,th.r{text-align:right}
     <section class="view" id="view-forecast">
       <div class="grid kpis" id="fcCards"></div>
       <div class="card section">
-        <h3>Revenue trajectory — actual &amp; 3-month projection</h3>
+        <h3>Fee income trajectory — actual &amp; 3-month projection</h3>
         <div class="chartbox" style="height:320px"><canvas id="chForecast"></canvas></div>
-        <p class="hint" style="margin-top:10px">Projection is a least-squares trend on monthly revenue; the band is ±1 typical monthly deviation. Treat it as direction, not gospel — one big launch changes everything.</p>
+        <p class="hint" style="margin-top:10px">Projection is a least-squares trend on monthly fee income (Realtech's actual revenue); the band is ±1 typical monthly deviation. Treat it as direction, not gospel — one big launch changes everything.</p>
       </div>
       <div class="card section">
         <h3>Project pacing vs FY target</h3>
@@ -277,6 +277,7 @@ td.r,th.r{text-align:right}
           <div class="field"><label>Total units</label><input type="number" id="pUnits"></div>
           <div class="field"><label>FY target revenue (₹ Cr)</label><input type="number" id="pTargetRev" step="0.5"></div>
           <div class="field"><label>FY target bookings</label><input type="number" id="pTargetBk"></div>
+          <div class="field"><label>Commission % (Realtech fee)</label><input type="number" id="pCommission" step="0.1" value="5" placeholder="5"></div>
         </div>
         <div class="formfoot"><button class="btn" id="saveProject">Add project</button></div>
       </div>
@@ -362,14 +363,28 @@ async function loadData() {
   $('loader').style.display = 'none';
 }
 
+/* ── commission rate per project ──
+   Priority: 'Commission %' column in Projects → else 4.5% if the project
+   name contains "Aikyam" → else 5% (Realtech's standard rate). */
+function rateOf(projectName) {
+  const p = (DB.projects || []).find(x => x['Project Name'] === projectName);
+  const r = Number(p && p['Commission %']);
+  if (r > 0) return r / 100;
+  return /aikyam/i.test(projectName || '') ? 0.045 : 0.05;
+}
+
 /* ── normalise rows ── */
 function normSales() {
-  return DB.sales.map(r => ({
-    id: r['Booking ID'], date: parseDate(r['Date']), project: r['Project'],
-    source: r['Source'], sub: r['Sub-Source'], person: r['Sales Person'],
-    value: Number(r['Agreement Value']) || 0, received: Number(r['Amount Received']) || 0,
-    status: r['Status'] || 'Booked'
-  })).filter(s => s.date && !isNaN(s.date));
+  return DB.sales.map(r => {
+    const value = Number(r['Agreement Value']) || 0;
+    return {
+      id: r['Booking ID'], date: parseDate(r['Date']), project: r['Project'],
+      source: r['Source'], sub: r['Sub-Source'], person: r['Sales Person'],
+      value, fee: value * rateOf(r['Project']),
+      received: Number(r['Amount Received']) || 0,
+      status: r['Status'] || 'Booked'
+    };
+  }).filter(s => s.date && !isNaN(s.date));
 }
 function normExpenses() {
   const map = {};
@@ -424,13 +439,13 @@ function analyse() {
 
   // full-FY monthly series (ignores month filter — used for trends/forecast)
   const months = fyMonths(F.fy);
-  const series = months.map(m => ({ ...m, revenue:0, bookings:0, expense:0, cancel:0 }));
+  const series = months.map(m => ({ ...m, revenue:0, fee:0, bookings:0, expense:0, cancel:0 }));
   const idx = {}; months.forEach((m,i)=>idx[m.key]=i);
   allSales.forEach(s => {
     const i = idx[monthKey(s.date)];
     if (i === undefined || !projFilter(s.project)) return;
     if (s.status === 'Cancelled') { series[i].cancel++; return; }
-    series[i].revenue += s.value; series[i].bookings++;
+    series[i].revenue += s.value; series[i].fee += s.fee; series[i].bookings++;
   });
   allExps.forEach(e => {
     const i = idx[monthKey(e.date)];
@@ -441,10 +456,10 @@ function analyse() {
   // For a single-project view, replace expense series with direct + allocated share
   if (F.project !== 'all') {
     series.forEach(m => m.expense = 0);
-    const revByProjMonth = {};   // key|proj -> revenue
+    const revByProjMonth = {};   // key|proj -> fee income (allocation weight)
     allSales.filter(s=>s.status!=='Cancelled').forEach(s => {
       const k = monthKey(s.date); revByProjMonth[k] = revByProjMonth[k] || {};
-      revByProjMonth[k][s.project] = (revByProjMonth[k][s.project]||0) + s.value;
+      revByProjMonth[k][s.project] = (revByProjMonth[k][s.project]||0) + s.fee;
     });
     allExps.forEach(e => {
       const i = idx[monthKey(e.date)]; if (i===undefined) return;
@@ -460,14 +475,15 @@ function analyse() {
 
   // period totals (respect month + project filters, with allocation)
   const perSales = active.filter(s => projFilter(s.project));
-  const revenue = perSales.reduce((a,s)=>a+s.value,0);
+  const revenue = perSales.reduce((a,s)=>a+s.value,0);      // GDV (sales value)
+  const fee = perSales.reduce((a,s)=>a+s.fee,0);            // Realtech's income
   const bookings = perSales.length;
   const received = perSales.reduce((a,s)=>a+s.received,0);
   let expense = 0;
   if (F.project === 'all') expense = exps.reduce((a,e)=>a+e.amount,0);
   else {
     const revByProj = {};
-    active.forEach(s => revByProj[s.project]=(revByProj[s.project]||0)+s.value);
+    active.forEach(s => revByProj[s.project]=(revByProj[s.project]||0)+s.fee);
     const totRev = Object.values(revByProj).reduce((a,b)=>a+b,0);
     exps.forEach(e => {
       if (e.scope === F.project) expense += e.amount;
@@ -478,10 +494,10 @@ function analyse() {
 
   // source table
   const bySource = {};
-  (DB.sources||[]).forEach(s => bySource[s] = { spend:0, bookings:0, revenue:0 });
+  (DB.sources||[]).forEach(s => bySource[s] = { spend:0, bookings:0, revenue:0, fee:0 });
   perSales.forEach(s => {
-    if (!bySource[s.source]) bySource[s.source]={spend:0,bookings:0,revenue:0};
-    bySource[s.source].bookings++; bySource[s.source].revenue += s.value;
+    if (!bySource[s.source]) bySource[s.source]={spend:0,bookings:0,revenue:0,fee:0};
+    bySource[s.source].bookings++; bySource[s.source].revenue += s.value; bySource[s.source].fee += s.fee;
   });
   const overheads = {};
   exps.forEach(e => {
@@ -496,17 +512,19 @@ function analyse() {
     const ps = active.filter(s => s.project === name);
     return {
       name, status: p['Status'],
+      rate: rateOf(name),
       targetRev: (Number(p['FY Target Revenue (Cr)'])||0)*1e7,
       targetBk: Number(p['FY Target Bookings'])||0,
       revenue: ps.reduce((a,s)=>a+s.value,0),
+      fee: ps.reduce((a,s)=>a+s.fee,0),
       bookings: ps.length,
       direct: exps.filter(e=>e.scope===name).reduce((a,e)=>a+e.amount,0),
       allocated: 0
     };
   });
   const centralTotal = exps.filter(e=>e.scope==='CENTRAL').reduce((a,e)=>a+e.amount,0);
-  const totSiteRev = sites.reduce((a,s)=>a+s.revenue,0);
-  sites.forEach(s => s.allocated = centralTotal * (totSiteRev>0 ? s.revenue/totSiteRev : 1/Math.max(1,sites.length)));
+  const totSiteFee = sites.reduce((a,s)=>a+s.fee,0);
+  sites.forEach(s => s.allocated = centralTotal * (totSiteFee>0 ? s.fee/totSiteFee : 1/Math.max(1,sites.length)));
 
   // FY pacing (always full FY, project-filtered sales)
   const fySales = allSales.filter(s => fyOf(s.date)===F.fy && s.status!=='Cancelled');
@@ -515,33 +533,36 @@ function analyse() {
   const elapsed = Math.min(1, Math.max(0.04,(Math.min(now,fyEnd)-fyStart)/(fyEnd-fyStart)));
   const pacing = DB.projects.map(p => {
     const name=p['Project Name'];
-    const rev = fySales.filter(s=>s.project===name).reduce((a,s)=>a+s.value,0);
-    const bk = fySales.filter(s=>s.project===name).length;
+    const mine = fySales.filter(s=>s.project===name);
+    const rev = mine.reduce((a,s)=>a+s.value,0);
+    const pFee = mine.reduce((a,s)=>a+s.fee,0);
+    const bk = mine.length;
     const tR = (Number(p['FY Target Revenue (Cr)'])||0)*1e7;
     const tB = Number(p['FY Target Bookings'])||0;
-    return { name, rev, bk, tR, tB,
+    return { name, rev, fee:pFee, bk, tR, tB,
+      tFee: tR * rateOf(name),                 // fee-equivalent target
       pace: tR>0 ? (rev/tR)/elapsed : null,
       achievedPct: tR>0 ? rev/tR : null };
   });
 
-  // forecast: OLS over months with any activity so far
+  // forecast: OLS over completed months, run on FEE INCOME (Realtech's revenue)
   const upto = series.filter(m => new Date(m.y, m.m+1, 0) <= now);
   const activeMonths = upto.length ? upto : series.slice(0,1);
-  const ys = activeMonths.map(m=>m.revenue);
+  const ys = activeMonths.map(m=>m.fee);
   const fc = forecast(ys, 3);
-  const fyToDateRev = ys.reduce((a,b)=>a+b,0);
+  const fyToDateFee = ys.reduce((a,b)=>a+b,0);
   const remaining = 12 - activeMonths.length;
-  const fcFyTotal = fyToDateRev + fc.next.slice(0, remaining).reduce((a,b)=>a+b,0)
+  const fcFyTotal = fyToDateFee + fc.next.slice(0, remaining).reduce((a,b)=>a+b,0)
     + Math.max(0, remaining-3) * (fc.next[2]||0);
 
-  // health score
-  const health = healthScore({ series: activeMonths, revenue, expense, bookings,
+  // health score — cost ratio & momentum measured against fee income
+  const health = healthScore({ series: activeMonths, revenue: fee, expense, bookings,
     cancelRate: sales.length ? cancelled.length/sales.length : 0,
     bySource, pacing, elapsed });
 
-  return { sales:perSales, cancelled, revenue, bookings, received, expense,
+  return { sales:perSales, cancelled, revenue, fee, bookings, received, expense,
     bySource, overheads, sites, series, pacing, elapsed, fc, activeMonths,
-    fyToDateRev, fcFyTotal, health, centralTotal };
+    fyToDateFee, fcFyTotal, health, centralTotal };
 }
 
 function forecast(ys, n) {
@@ -560,13 +581,13 @@ function forecast(ys, n) {
 
 function healthScore(x) {
   const f = [];
-  // 1 · S&M cost ratio (target ≤8% of topline)
+  // 1 · Spend as % of FEE income (a commission business: ≤65% healthy, ≥100% = losing money)
   const ratio = x.revenue>0 ? x.expense/x.revenue : 1;
-  f.push({ name:'Cost of sale ratio', w:25, s:clamp(lin(ratio,0.18,0.08)), note: pct(ratio)+' of revenue' });
-  // 2 · revenue momentum (trend slope vs average)
+  f.push({ name:'Cost of sale ratio', w:25, s:clamp(lin(ratio,1.0,0.65)), note: pct(ratio)+' of fee income' });
+  // 2 · fee income momentum (trend slope vs average)
   const recent = x.series.slice(-4);
-  const avg = recent.reduce((a,m)=>a+m.revenue,0)/Math.max(1,recent.length);
-  const sl = forecast(recent.map(m=>m.revenue),1).slope;
+  const avg = recent.reduce((a,m)=>a+m.fee,0)/Math.max(1,recent.length);
+  const sl = forecast(recent.map(m=>m.fee),1).slope;
   const mom = avg>0 ? sl/avg : 0;
   f.push({ name:'Revenue momentum', w:20, s:clamp(50 + mom*500), note:(mom>=0?'+':'')+pct(mom)+' / month' });
   // 3 · cost per booking trend
@@ -617,25 +638,28 @@ function buildInsights(A) {
   });
 
   // ROI ranking
-  const roi = src.filter(([,v])=>v.spend>0).map(([n,v])=>({n, roi:v.revenue/v.spend, cpb:v.bookings?v.spend/v.bookings:null, ...v}))
+  const roi = src.filter(([,v])=>v.spend>0).map(([n,v])=>({n, roi:v.fee/v.spend, cpb:v.bookings?v.spend/v.bookings:null, ...v}))
     .sort((a,b)=>b.roi-a.roi);
   if (roi.length >= 2) {
     const best = roi[0], worst = roi[roi.length-1];
     if (best.roi > worst.roi*1.8 && worst.spend > 0)
       out.push({ level:'warn', title:`Budget efficiency gap: ${best.n} vs ${worst.n}`,
-        body:`Every rupee on ${best.n} returns ${best.roi.toFixed(1)}× in agreement value; ${worst.n} returns ${worst.roi.toFixed(1)}×. Before the next spend cycle, test shifting 15–20% of the ${worst.n} budget toward ${best.n} and watch cost per booking for a month.` });
+        body:`Every rupee on ${best.n} returns ₹${best.roi.toFixed(2)} in fee income; ${worst.n} returns ₹${worst.roi.toFixed(2)}${worst.roi<1?' — it loses money at current commission rates':''}. Before the next spend cycle, test shifting 15–20% of the ${worst.n} budget toward ${best.n} and watch cost per booking for a month.` });
     out.push({ level:'good', title:`${best.n} is your most efficient channel`,
-      body:`${fmt(best.spend)} spent → ${best.bookings} bookings → ${fmt(best.revenue)} revenue (${best.roi.toFixed(1)}× return${best.cpb?`, ${fmt(best.cpb)} per booking`:''}).` });
+      body:`${fmt(best.spend)} spent → ${best.bookings} bookings → ${fmt(best.fee)} fee income (${best.roi.toFixed(2)}× return${best.cpb?`, ${fmt(best.cpb)} per booking`:''}).` });
+    roi.filter(r=>r.roi < 1 && r.spend > 0 && r !== best).forEach(r =>
+      out.push({ level:'risk', title:`${r.n} costs more than it earns`,
+        body:`${fmt(r.spend)} spent to earn ${fmt(r.fee)} in fees (${r.roi.toFixed(2)}× return). Unless these bookings carry strategic value — launch momentum, inventory clearing — this channel is running below breakeven on commission economics.` }));
   }
 
   // expense growth vs revenue growth
   const s = A.activeMonths;
   if (s.length >= 3) {
     const g = a => a.at(-1) > 0 && a.at(-2) > 0 ? a.at(-1)/a.at(-2) - 1 : null;
-    const revG = g(s.map(m=>m.revenue)), expG = g(s.map(m=>m.expense));
+    const revG = g(s.map(m=>m.fee)), expG = g(s.map(m=>m.expense));
     if (revG!=null && expG!=null && expG > revG + 0.15)
-      out.push({ level:'warn', title:'Spend is growing faster than revenue',
-        body:`Last month expenses moved ${pct(expG)} while revenue moved ${pct(revG)}. One month is noise; two is a pattern — check which category is climbing on the Pulse page.` });
+      out.push({ level:'warn', title:'Spend is growing faster than fee income',
+        body:`Last month expenses moved ${pct(expG)} while fee income moved ${pct(revG)}. One month is noise; two is a pattern — check which category is climbing on the Pulse page.` });
   }
 
   // cancellations
@@ -650,12 +674,12 @@ function buildInsights(A) {
     out.push({ level:'good', title:'Organic engine is real',
       body:`Referrals and direct walk-ins account for ${pct(freeBk/totBk)} of bookings at near-zero acquisition cost — a sign of brand pull and customer satisfaction. A structured referral reward program could amplify this cheaply.` });
 
-  // forecast vs target
-  const tTot = A.pacing.reduce((a,p)=>a+p.tR,0);
+  // forecast vs target (fee terms — Realtech's actual revenue)
+  const tTot = A.pacing.reduce((a,p)=>a+p.tFee,0);
   if (tTot>0) {
     const gap = A.fcFyTotal - tTot;
-    out.push({ level: gap>=0?'good':'warn', title: gap>=0?'Trend says target is reachable':'Trend falls short of FY target',
-      body:`Current trajectory projects ~${fmt(A.fcFyTotal)} by March against ${fmt(tTot)} targeted (${gap>=0?'+':''}${fmt(gap)}). ${gap<0?'Closing it means either lifting monthly run-rate to '+fmt((tTot-A.fyToDateRev)/Math.max(1,12-A.activeMonths.length))+' or pulling a launch forward.':'Protect the pace — the risk now is complacency in H2.'}` });
+    out.push({ level: gap>=0?'good':'warn', title: gap>=0?'Trend says fee target is reachable':'Trend falls short of FY fee target',
+      body:`Current trajectory projects ~${fmt(A.fcFyTotal)} of fee income by March against ${fmt(tTot)} targeted (${gap>=0?'+':''}${fmt(gap)}). ${gap<0?'Closing it means either lifting monthly fee run-rate to '+fmt((tTot-A.fyToDateFee)/Math.max(1,12-A.activeMonths.length))+' or pulling a launch forward.':'Protect the pace — the risk now is complacency in H2.'}` });
   }
 
   if (!out.length) out.push({ level:'good', title:'Nothing on fire', body:'No rule tripped for this period. Add more data or widen the date range for richer signals.' });
@@ -673,14 +697,14 @@ function renderAll() {
 
 function renderKPIs(A) {
   const cpb = A.bookings ? A.expense/A.bookings : null;
-  const net = A.revenue - A.expense;
+  const net = A.fee - A.expense;
   const cards = [
-    ['Revenue booked', fmt(A.revenue), A.bookings + ' bookings'],
-    ['Total S&M spend', fmt(A.expense), pct(A.revenue?A.expense/A.revenue:NaN) + ' of revenue'],
-    ['Net of spend', fmt(net), net>=0?'contribution positive':'spend exceeds revenue', net>=0?'up':'down'],
+    ['Sales value (GDV)', fmt(A.revenue), A.bookings + ' bookings'],
+    ['Fee income', fmt(A.fee), 'auto @ 4.5% Aikyam · 5% others'],
+    ['Total S&M spend', fmt(A.expense), pct(A.fee?A.expense/A.fee:NaN) + ' of fee income'],
+    ['Net contribution', fmt(net), net>=0?'fee income covers spend':'spend exceeds fee income', net>=0?'up':'down'],
     ['Cost per booking', cpb!=null?fmt(cpb):'–', 'blended, all sources'],
-    ['Avg ticket size', A.bookings?fmt(A.revenue/A.bookings):'–', 'agreement value'],
-    ['Collections', fmt(A.received), 'received against bookings']
+    ['Avg ticket size', A.bookings?fmt(A.revenue/A.bookings):'–', 'agreement value']
   ];
   $('kpiRow').innerHTML = cards.map(([l,v,d,cls]) =>
     `<div class="card kpi"><div class="lbl">${l}</div><div class="val num">${v}</div><div class="delta ${cls||'flat'}">${d}</div></div>`).join('');
@@ -717,11 +741,15 @@ function renderCharts(A) {
   killChart('rev');
   charts.rev = new Chart($('chRevExp'), {
     data: { labels, datasets: [
-      { type:'bar', label:'Revenue', data:A.series.map(m=>m.revenue), backgroundColor:'rgba(217,169,76,.75)', borderRadius:4 },
-      { type:'line', label:'Spend', data:A.series.map(m=>m.expense), borderColor:'#E06552', backgroundColor:'#E06552', tension:.3, pointRadius:3 }
+      { type:'bar', label:'Sales value (GDV)', data:A.series.map(m=>m.revenue), backgroundColor:'rgba(217,169,76,.35)', borderRadius:4, yAxisID:'y' },
+      { type:'line', label:'Fee income', data:A.series.map(m=>m.fee), borderColor:'#43BD8B', backgroundColor:'#43BD8B', tension:.3, pointRadius:3, yAxisID:'y1' },
+      { type:'line', label:'Spend', data:A.series.map(m=>m.expense), borderColor:'#E06552', backgroundColor:'#E06552', tension:.3, pointRadius:3, yAxisID:'y1' }
     ]},
     options: { maintainAspectRatio:false, plugins:{ legend:{position:'bottom'} , tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmt(c.raw)}}},
-      scales:{ y:{ ticks:{ callback:v=>fmt(v) } } } }
+      scales:{
+        y:{ position:'left', ticks:{ callback:v=>fmt(v) }, title:{display:true,text:'GDV'} },
+        y1:{ position:'right', grid:{drawOnChartArea:false}, ticks:{ callback:v=>fmt(v) }, title:{display:true,text:'Fee / Spend'} }
+      } }
   });
 
   killChart('mix');
@@ -738,21 +766,22 @@ function renderCharts(A) {
 function renderSourceTable(A) {
   const rows = Object.entries(A.bySource).map(([name,v]) => ({ name, ...v,
     cpb: v.bookings? v.spend/v.bookings : null,
-    roi: v.spend>0? v.revenue/v.spend : null
-  })).filter(r=>r.spend>0||r.bookings>0).sort((a,b)=>b.revenue-a.revenue);
-  $('tblSource').innerHTML = `<tr><th>Source</th><th class="r">Spend</th><th class="r">Bookings</th><th class="r">Revenue</th><th class="r">Cost / booking</th><th class="r">Return ×</th></tr>` +
+    roi: v.spend>0? v.fee/v.spend : null            // return on Realtech's actual income
+  })).filter(r=>r.spend>0||r.bookings>0).sort((a,b)=>b.fee-a.fee);
+  $('tblSource').innerHTML = `<tr><th>Source</th><th class="r">Spend</th><th class="r">Bookings</th><th class="r">Sales value</th><th class="r">Fee income</th><th class="r">Cost / booking</th><th class="r">Fee return ×</th></tr>` +
     (rows.length? rows.map(r=>`<tr><td>${esc(r.name)}</td><td class="r num">${fmt(r.spend)}</td><td class="r num">${r.bookings}</td>
-      <td class="r num">${fmt(r.revenue)}</td><td class="r num">${r.cpb!=null?fmt(r.cpb):'–'}</td>
-      <td class="r num">${r.roi!=null? '<span class="pill '+(r.roi>=15?'good':r.roi>=8?'warn':'risk')+'">'+r.roi.toFixed(1)+'×</span>':'∞'}</td></tr>`).join('')
-    : '<tr><td colspan="6" class="empty">No activity in this period</td></tr>');
+      <td class="r num">${fmt(r.revenue)}</td><td class="r num">${fmt(r.fee)}</td><td class="r num">${r.cpb!=null?fmt(r.cpb):'–'}</td>
+      <td class="r num">${r.roi!=null? '<span class="pill '+(r.roi>=1.5?'good':r.roi>=1?'warn':'risk')+'">'+r.roi.toFixed(2)+'×</span>':'∞'}</td></tr>`).join('')
+    : '<tr><td colspan="7" class="empty">No activity in this period</td></tr>');
 }
 
 function renderSiteTable(A) {
-  $('tblSite').innerHTML = `<tr><th>Site</th><th class="r">Bookings</th><th class="r">Revenue</th><th class="r">Direct spend</th><th class="r">Allocated central</th><th class="r">Contribution</th><th class="r">Margin</th></tr>` +
+  $('tblSite').innerHTML = `<tr><th>Site</th><th class="r">Rate</th><th class="r">Bookings</th><th class="r">Sales value</th><th class="r">Fee income</th><th class="r">Direct spend</th><th class="r">Allocated central</th><th class="r">Contribution</th><th class="r">Margin</th></tr>` +
     A.sites.map(s => {
-      const contrib = s.revenue - s.direct - s.allocated;
-      const m = s.revenue>0? contrib/s.revenue : null;
-      return `<tr><td>${esc(s.name)}</td><td class="r num">${s.bookings}</td><td class="r num">${fmt(s.revenue)}</td>
+      const contrib = s.fee - s.direct - s.allocated;
+      const m = s.fee>0? contrib/s.fee : null;
+      return `<tr><td>${esc(s.name)}</td><td class="r num">${(s.rate*100).toFixed(1)}%</td><td class="r num">${s.bookings}</td>
+        <td class="r num">${fmt(s.revenue)}</td><td class="r num">${fmt(s.fee)}</td>
         <td class="r num">${fmt(s.direct)}</td><td class="r num">${fmt(s.allocated)}</td>
         <td class="r num" style="color:${contrib>=0?'var(--jade)':'var(--ember)'}">${fmt(contrib)}</td>
         <td class="r num">${m!=null?pct(m):'–'}</td></tr>`;
@@ -761,23 +790,23 @@ function renderSiteTable(A) {
 
 function renderOverheads(A) {
   const rows = Object.entries(A.overheads);
-  $('tblOverhead').innerHTML = `<tr><th>Bucket</th><th class="r">Amount</th><th class="r">% of revenue</th></tr>` +
-    (rows.length? rows.map(([n,v])=>`<tr><td>${esc(n)}</td><td class="r num">${fmt(v)}</td><td class="r num">${pct(A.revenue?v/A.revenue:NaN)}</td></tr>`).join('')
+  $('tblOverhead').innerHTML = `<tr><th>Bucket</th><th class="r">Amount</th><th class="r">% of fee income</th></tr>` +
+    (rows.length? rows.map(([n,v])=>`<tr><td>${esc(n)}</td><td class="r num">${fmt(v)}</td><td class="r num">${pct(A.fee?v/A.fee:NaN)}</td></tr>`).join('')
     : '<tr><td colspan="3" class="empty">No overhead entries in this period</td></tr>');
 }
 
 function renderForecast(A) {
-  const tTot = A.pacing.reduce((a,p)=>a+p.tR,0);
+  const tFeeTot = A.pacing.reduce((a,p)=>a+p.tFee,0);
   const monthsLeft = Math.max(0, 12 - A.activeMonths.length);
-  const needed = monthsLeft>0 ? Math.max(0,(tTot - A.fyToDateRev))/monthsLeft : 0;
+  const needed = monthsLeft>0 ? Math.max(0,(tFeeTot - A.fyToDateFee))/monthsLeft : 0;
   $('fcCards').innerHTML = [
-    ['Next 3 months (projected)', fmt(A.fc.next.reduce((a,b)=>a+b,0)), 'least-squares trend'],
-    ['FY landing (projected)', fmt(A.fcFyTotal), tTot? pct(A.fcFyTotal/tTot)+' of target' : 'no targets set'],
-    ['FY target (all sites)', tTot?fmt(tTot):'–', 'from project master'],
-    ['Run-rate needed', monthsLeft? fmt(needed):'–', monthsLeft+' months remain']
+    ['Fee income · next 3 months', fmt(A.fc.next.reduce((a,b)=>a+b,0)), 'least-squares trend'],
+    ['FY fee landing (projected)', fmt(A.fcFyTotal), tFeeTot? pct(A.fcFyTotal/tFeeTot)+' of fee target' : 'no targets set'],
+    ['FY fee target (all sites)', tFeeTot?fmt(tFeeTot):'–', 'GDV targets × commission rate'],
+    ['Fee run-rate needed', monthsLeft? fmt(needed):'–', monthsLeft+' months remain']
   ].map(([l,v,d])=>`<div class="card kpi"><div class="lbl">${l}</div><div class="val num">${v}</div><div class="delta flat">${d}</div></div>`).join('');
 
-  const actual = A.activeMonths.map(m=>m.revenue);
+  const actual = A.activeMonths.map(m=>m.fee);
   const labels = [...A.series.map(m=>m.label)];
   const fcLine = Array(labels.length).fill(null);
   const bandHi = Array(labels.length).fill(null), bandLo = Array(labels.length).fill(null);
@@ -791,7 +820,7 @@ function renderForecast(A) {
   killChart('fc');
   charts.fc = new Chart($('chForecast'), {
     data:{ labels, datasets:[
-      { type:'bar', label:'Actual revenue', data:[...actual, ...Array(labels.length-actual.length).fill(null)], backgroundColor:'rgba(217,169,76,.75)', borderRadius:4 },
+      { type:'bar', label:'Actual fee income', data:[...actual, ...Array(labels.length-actual.length).fill(null)], backgroundColor:'rgba(217,169,76,.75)', borderRadius:4 },
       { type:'line', label:'Projection', data:fcLine, borderColor:'#43BD8B', borderDash:[6,5], tension:.25, pointRadius:3, backgroundColor:'#43BD8B' },
       { type:'line', label:'Band (high)', data:bandHi, borderColor:'rgba(67,189,139,.0)', backgroundColor:'rgba(67,189,139,.10)', fill:'+1', pointRadius:0 },
       { type:'line', label:'Band (low)', data:bandLo, borderColor:'rgba(67,189,139,.0)', pointRadius:0 }
@@ -802,12 +831,12 @@ function renderForecast(A) {
       scales:{ y:{ ticks:{ callback:v=>fmt(v) } } } }
   });
 
-  $('tblPacing').innerHTML = `<tr><th>Project</th><th class="r">FY revenue</th><th class="r">Target</th><th class="r">Achieved</th><th>Pace vs time</th><th class="r">Verdict</th></tr>` +
+  $('tblPacing').innerHTML = `<tr><th>Project</th><th class="r">FY sales value</th><th class="r">Fee earned</th><th class="r">GDV target</th><th class="r">Achieved</th><th>Pace vs time</th><th class="r">Verdict</th></tr>` +
     A.pacing.map(p => {
       const w = p.achievedPct!=null? Math.min(100,p.achievedPct*100) : 0;
       const col = p.pace==null? 'var(--faint)' : p.pace>=0.95?'var(--jade)': p.pace>=0.7?'var(--amber)':'var(--ember)';
       const verdict = p.pace==null?'no target': p.pace>=0.95?'on track': p.pace>=0.7?'watch':'behind';
-      return `<tr><td>${esc(p.name)}</td><td class="r num">${fmt(p.rev)}</td><td class="r num">${p.tR?fmt(p.tR):'–'}</td>
+      return `<tr><td>${esc(p.name)}</td><td class="r num">${fmt(p.rev)}</td><td class="r num">${fmt(p.fee)}</td><td class="r num">${p.tR?fmt(p.tR):'–'}</td>
         <td class="r num">${p.achievedPct!=null?pct(p.achievedPct):'–'}</td>
         <td><div class="pace"><i style="width:${w}%;background:${col}"></i></div></td>
         <td class="r"><span class="pill ${p.pace==null?'warn':p.pace>=0.95?'good':p.pace>=0.7?'warn':'risk'}">${verdict}</span></td></tr>`;
@@ -820,10 +849,11 @@ function renderInsights(A) {
 }
 
 function renderProjects() {
-  $('tblProjects').innerHTML = `<tr><th>ID</th><th>Name</th><th>Location</th><th class="r">Units</th><th class="r">FY target (Cr)</th><th class="r">Target bookings</th><th>Status</th></tr>` +
+  $('tblProjects').innerHTML = `<tr><th>ID</th><th>Name</th><th>Location</th><th class="r">Units</th><th class="r">FY target (Cr)</th><th class="r">Target bookings</th><th class="r">Commission</th><th>Status</th></tr>` +
     DB.projects.map(p=>`<tr><td class="num">${esc(p['Project ID'])}</td><td>${esc(p['Project Name'])}</td><td>${esc(p['Location'])}</td>
       <td class="r num">${esc(p['Total Units'])}</td><td class="r num">${esc(p['FY Target Revenue (Cr)'])}</td>
-      <td class="r num">${esc(p['FY Target Bookings'])}</td><td><span class="pill ${p['Status']==='Active'?'good':'warn'}">${esc(p['Status'])}</span></td></tr>`).join('');
+      <td class="r num">${esc(p['FY Target Bookings'])}</td><td class="r num">${(rateOf(p['Project Name'])*100).toFixed(1)}%</td>
+      <td><span class="pill ${p['Status']==='Active'?'good':'warn'}">${esc(p['Status'])}</span></td></tr>`).join('');
 }
 
 /* ════════════════ WRITE ACTIONS ════════════════ */
@@ -860,10 +890,11 @@ $('saveExpense').onclick = function() {
 
 $('saveProject').onclick = function() {
   const p = { action:'addProject', name:$('pName').value, location:$('pLoc').value,
-    totalUnits:$('pUnits').value, targetRevenueCr:$('pTargetRev').value, targetBookings:$('pTargetBk').value };
+    totalUnits:$('pUnits').value, targetRevenueCr:$('pTargetRev').value, targetBookings:$('pTargetBk').value,
+    commissionPct: $('pCommission').value || (/aikyam/i.test($('pName').value) ? 4.5 : 5) };
   if (!p.name) return toast('Project name is required');
   submit(this, p, () => DB.projects.push({ 'Project ID':'PRJ-DEMO','Project Name':p.name,'Location':p.location,'Total Units':p.totalUnits,
-    'Status':'Active','FY Target Revenue (Cr)':p.targetRevenueCr,'FY Target Bookings':p.targetBookings }));
+    'Status':'Active','FY Target Revenue (Cr)':p.targetRevenueCr,'FY Target Bookings':p.targetBookings,'Commission %':p.commissionPct }));
 };
 
 /* ════════════════ NAV & FILTERS ════════════════ */
@@ -882,9 +913,10 @@ $('refreshBtn').onclick = loadData;
 /* ════════════════ DEMO DATA ════════════════ */
 function demoData() {
   const projects = [
-    { 'Project ID':'PRJ-001','Project Name':'Mangalam Midas City','Location':'PCMC','Total Units':400,'Status':'Active','FY Target Revenue (Cr)':120,'FY Target Bookings':180 },
-    { 'Project ID':'PRJ-002','Project Name':'Mangalam Myra','Location':'Pune','Total Units':220,'Status':'Active','FY Target Revenue (Cr)':80,'FY Target Bookings':110 },
-    { 'Project ID':'PRJ-003','Project Name':'Mangalam Momento','Location':'Pune','Total Units':160,'Status':'Active','FY Target Revenue (Cr)':55,'FY Target Bookings':70 }
+    { 'Project ID':'PRJ-001','Project Name':'Mangalam Midas City','Location':'PCMC','Total Units':400,'Status':'Active','FY Target Revenue (Cr)':120,'FY Target Bookings':180,'Commission %':5 },
+    { 'Project ID':'PRJ-002','Project Name':'Mangalam Myra','Location':'Pune','Total Units':220,'Status':'Active','FY Target Revenue (Cr)':80,'FY Target Bookings':110,'Commission %':5 },
+    { 'Project ID':'PRJ-003','Project Name':'Mangalam Momento','Location':'Pune','Total Units':160,'Status':'Active','FY Target Revenue (Cr)':55,'FY Target Bookings':70,'Commission %':5 },
+    { 'Project ID':'PRJ-004','Project Name':'Mangalam Aikyam','Location':'Pune','Total Units':180,'Status':'Active','FY Target Revenue (Cr)':60,'FY Target Bookings':75,'Commission %':4.5 }
   ];
   const sources = ['Hoarding','Digital Marketing','Channel Partner','Referral','Direct Walk-in'];
   const expenseCategories = [
@@ -904,7 +936,7 @@ function demoData() {
     const d0 = new Date(2025, 3+mi, 1);
     const growth = 1 + mi*0.035;
     projects.forEach((p,pi) => {
-      const base = [6,4,3][pi];
+      const base = [6,4,3,3][pi];
       const n = Math.max(1, Math.round(base*growth + (rnd()*3-1.5)));
       for (let i=0;i<n;i++) {
         const r = rnd(); let acc=0, src=srcMix[0][0];
@@ -922,16 +954,16 @@ function demoData() {
     });
     const dstr = dd => `${d0.getFullYear()}-${String(d0.getMonth()+1).padStart(2,'0')}-${String(dd).padStart(2,'0')}`;
     const addE = (scope,cat,amt,desc) => expenses.push({ 'Expense ID':'EX-'+String(ex++).padStart(4,'0'),'Date':dstr(3+Math.floor(rnd()*22)),'Scope':scope,'Category':cat,'Description':desc,'Amount':Math.round(amt) });
-    addE('CENTRAL','Digital Marketing', (9+rnd()*5)*1e5*growth, 'Meta + Google campaigns');
-    addE('CENTRAL','Marketing Team Salary', 8.5e5, 'Central marketing payroll');
-    addE('CENTRAL','CP Team Salary', 6.5e5, 'CP sourcing payroll');
-    addE('CENTRAL','Events & Activations', (1+rnd()*3)*1e5, 'Society activations');
+    addE('CENTRAL','Digital Marketing', (4+rnd()*2.5)*1e5*growth, 'Meta + Google campaigns');
+    addE('CENTRAL','Marketing Team Salary', 4.5e5, 'Central marketing payroll');
+    addE('CENTRAL','CP Team Salary', 3.5e5, 'CP sourcing payroll');
+    addE('CENTRAL','Events & Activations', (0.5+rnd()*1.5)*1e5, 'Society activations');
     projects.forEach(p => {
-      addE(p['Project Name'],'Hoarding & Outdoor', (2+rnd()*3)*1e5, 'Site hoardings');
-      addE(p['Project Name'],'Sales Team Salary', (3.5+rnd())*1e5, 'Site sales payroll');
-      addE(p['Project Name'],'CP Brokerage', (4+rnd()*6)*1e5*growth, 'Brokerage payouts');
-      if (rnd()<.5) addE(p['Project Name'],'Referral Payout', (0.5+rnd())*1e5, 'Referral rewards');
-      if (rnd()<.4) addE(p['Project Name'],'Collaterals & Print', (0.3+rnd()*0.7)*1e5, 'Brochures, standees');
+      addE(p['Project Name'],'Hoarding & Outdoor', (0.8+rnd()*1.2)*1e5, 'Site hoardings');
+      addE(p['Project Name'],'Sales Team Salary', (1.8+rnd()*0.6)*1e5, 'Site sales payroll');
+      addE(p['Project Name'],'CP Brokerage', (2+rnd()*3)*1e5*growth, 'Brokerage payouts');
+      if (rnd()<.5) addE(p['Project Name'],'Referral Payout', (0.3+rnd()*0.5)*1e5, 'Referral rewards');
+      if (rnd()<.4) addE(p['Project Name'],'Collaterals & Print', (0.2+rnd()*0.4)*1e5, 'Brochures, standees');
     });
   }
   return { projects, sales, expenses, sources, expenseCategories, generatedAt: new Date().toISOString() };
