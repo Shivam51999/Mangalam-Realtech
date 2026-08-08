@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mangalam Realtech · Business Pulse</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,300..800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{
+  --ink:#0C111C; --panel:#131B2C; --panel2:#0F1626; --line:#233049;
+  --brass:#D9A94C; --brass-dim:#8a6f38; --jade:#43BD8B; --ember:#E06552; --amber:#E3A13B;
+  --text:#EAEFF7; --muted:#8A96AD; --faint:#5A6478;
+  --radius:14px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--ink); color:var(--text);
+  font-family:'Archivo',system-ui,sans-serif; font-size:14px;
+  background-image:radial-gradient(1200px 500px at 80% -10%, rgba(217,169,76,.06), transparent 60%);
+}
+.num{font-family:'IBM Plex Mono',monospace}
+a{color:var(--brass)}
+
+/* ── shell ── */
+.shell{display:grid;grid-template-columns:216px 1fr;min-height:100vh}
+.rail{border-right:1px solid var(--line);padding:22px 14px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;gap:4px;background:var(--panel2)}
+.brand{padding:0 10px 18px}
+.brand .mark{font-weight:800;letter-spacing:.12em;font-size:12px;color:var(--brass);text-transform:uppercase}
+.brand h1{font-size:19px;font-weight:700;font-variation-settings:'wdth' 112;margin-top:2px}
+.brand .sub{color:var(--faint);font-size:11px;margin-top:3px;letter-spacing:.04em}
+.navlbl{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--faint);padding:14px 10px 6px}
+.navbtn{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:0;color:var(--muted);
+  padding:9px 10px;border-radius:9px;font:inherit;font-weight:500;cursor:pointer;transition:.15s}
+.navbtn:hover{color:var(--text);background:rgba(255,255,255,.04)}
+.navbtn.active{color:var(--brass);background:rgba(217,169,76,.10)}
+.navbtn .ic{width:17px;text-align:center;opacity:.9}
+.rail .foot{margin-top:auto;padding:10px;font-size:11px;color:var(--faint)}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;background:var(--jade)}
+.dot.demo{background:var(--amber)}
+
+main{padding:26px 30px 60px;max-width:1240px;width:100%}
+
+/* ── filter bar ── */
+.filters{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:22px}
+.filters .title{font-size:22px;font-weight:700;font-variation-settings:'wdth' 110;margin-right:auto}
+select,input,textarea{
+  background:var(--panel);border:1px solid var(--line);color:var(--text);
+  padding:8px 12px;border-radius:9px;font:inherit;font-size:13px;outline:none}
+select:focus,input:focus,textarea:focus{border-color:var(--brass-dim)}
+.btn{background:var(--brass);color:#171100;border:0;font-weight:700;padding:9px 18px;border-radius:9px;cursor:pointer;font:inherit;font-weight:700}
+.btn:hover{filter:brightness(1.08)}
+.btn.ghost{background:transparent;color:var(--brass);border:1px solid var(--brass-dim)}
+.btn:disabled{opacity:.5;cursor:wait}
+
+/* ── cards & grid ── */
+.grid{display:grid;gap:14px}
+.kpis{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;position:relative;overflow:hidden}
+.kpi .lbl{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.kpi .val{font-size:24px;font-weight:600;margin-top:7px;letter-spacing:-.01em}
+.kpi .delta{font-size:11.5px;margin-top:5px}
+.up{color:var(--jade)} .down{color:var(--ember)} .flat{color:var(--muted)}
+.card h3{font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:14px}
+.two{grid-template-columns:1.6fr 1fr}
+.chartbox{position:relative;height:280px}
+
+/* ── health dial (signature) ── */
+.health{display:grid;grid-template-columns:190px 1fr;gap:22px;align-items:center}
+.dialwrap{position:relative;width:180px;height:180px;margin:auto}
+.dialwrap svg{transform:rotate(-90deg)}
+.dialscore{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.dialscore .n{font-size:42px;font-weight:700;line-height:1}
+.dialscore .t{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin-top:4px}
+.factors{display:flex;flex-direction:column;gap:9px}
+.factor{display:grid;grid-template-columns:150px 1fr 42px;gap:10px;align-items:center;font-size:12.5px}
+.factor .bar{height:6px;background:var(--panel2);border-radius:4px;overflow:hidden;border:1px solid var(--line)}
+.factor .bar i{display:block;height:100%;border-radius:4px}
+.factor .sc{text-align:right;color:var(--muted)}
+
+/* ── tables ── */
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);font-weight:600}
+td{padding:9px 10px;border-bottom:1px solid rgba(35,48,73,.5)}
+tr:last-child td{border-bottom:0}
+td.r,th.r{text-align:right}
+.pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600}
+.pill.good{background:rgba(67,189,139,.13);color:var(--jade)}
+.pill.warn{background:rgba(227,161,59,.13);color:var(--amber)}
+.pill.risk{background:rgba(224,101,82,.13);color:var(--ember)}
+.pace{height:6px;background:var(--panel2);border:1px solid var(--line);border-radius:4px;overflow:hidden;min-width:90px}
+.pace i{display:block;height:100%}
+
+/* ── insights ── */
+.insight{border-left:3px solid var(--line);padding:12px 16px;background:var(--panel);border-radius:0 12px 12px 0;margin-bottom:11px}
+.insight.good{border-left-color:var(--jade)} .insight.warn{border-left-color:var(--amber)} .insight.risk{border-left-color:var(--ember)}
+.insight h4{font-size:13.5px;margin-bottom:4px}
+.insight p{color:var(--muted);font-size:12.5px;line-height:1.55}
+
+/* ── forms ── */
+.formgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+.field label{display:block;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.field input,.field select,.field textarea{width:100%}
+.formfoot{margin-top:20px;display:flex;gap:10px;align-items:center}
+.hint{color:var(--faint);font-size:12px}
+
+/* ── misc ── */
+.section{margin-top:22px}
+.empty{color:var(--faint);text-align:center;padding:30px;font-size:13px}
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);opacity:0;pointer-events:none;
+  background:var(--panel);border:1px solid var(--brass-dim);color:var(--text);padding:11px 20px;border-radius:10px;transition:.25s;z-index:50;font-size:13px}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#loader{position:fixed;inset:0;background:var(--ink);display:flex;align-items:center;justify-content:center;z-index:40;flex-direction:column;gap:14px;color:var(--muted)}
+.spin{width:34px;height:34px;border:3px solid var(--line);border-top-color:var(--brass);border-radius:50%;animation:sp 1s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.view{display:none}.view.on{display:block}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+@media(max-width:900px){
+  .shell{grid-template-columns:1fr}
+  .rail{position:static;height:auto;flex-direction:row;flex-wrap:wrap;align-items:center;padding:12px}
+  .brand{padding:0 10px;margin-right:auto}
+  .navlbl,.rail .foot{display:none}
+  .two,.health{grid-template-columns:1fr}
+  main{padding:18px 14px 60px}
+}
+</style>
+</head>
+<body>
+
+<div id="loader"><div class="spin"></div><div id="loadmsg">Reading the books…</div></div>
+
+<div class="shell">
+  <nav class="rail">
+    <div class="brand">
+      <div class="mark">Mangalam Realtech</div>
+      <h1>Business Pulse</h1>
+      <div class="sub">Sales · Sources · Sites · Spend</div>
+    </div>
+    <div class="navlbl">Analyse</div>
+    <button class="navbtn active" data-view="pulse"><span class="ic">◉</span>Pulse</button>
+    <button class="navbtn" data-view="forecast"><span class="ic">↗</span>Forecast</button>
+    <button class="navbtn" data-view="insights"><span class="ic">✦</span>Insights</button>
+    <div class="navlbl">Enter</div>
+    <button class="navbtn" data-view="sale"><span class="ic">＋</span>New booking</button>
+    <button class="navbtn" data-view="expense"><span class="ic">₹</span>New expense</button>
+    <button class="navbtn" data-view="projects"><span class="ic">▤</span>Projects</button>
+    <div class="foot"><span class="dot" id="connDot"></span><span id="connTxt">Connected</span></div>
+  </nav>
+
+  <main>
+    <div class="filters">
+      <div class="title" id="viewTitle">Pulse</div>
+      <select id="fFY"></select>
+      <select id="fMonth"><option value="all">Full year</option></select>
+      <select id="fProject"><option value="all">All projects</option></select>
+      <button class="btn ghost" id="refreshBtn">Refresh</button>
+    </div>
+
+    <!-- ═══ PULSE ═══ -->
+    <section class="view on" id="view-pulse">
+      <div class="grid kpis" id="kpiRow"></div>
+
+      <div class="grid two section">
+        <div class="card">
+          <h3>Revenue vs spend · monthly</h3>
+          <div class="chartbox"><canvas id="chRevExp"></canvas></div>
+        </div>
+        <div class="card health">
+          <div>
+            <div class="dialwrap">
+              <svg width="180" height="180" viewBox="0 0 180 180">
+                <circle cx="90" cy="90" r="78" fill="none" stroke="#233049" stroke-width="12"/>
+                <circle id="dialArc" cx="90" cy="90" r="78" fill="none" stroke="#D9A94C" stroke-width="12"
+                        stroke-linecap="round" stroke-dasharray="490" stroke-dashoffset="490"/>
+              </svg>
+              <div class="dialscore"><div class="n num" id="healthN">–</div><div class="t">Health score</div></div>
+            </div>
+          </div>
+          <div class="factors" id="healthFactors"></div>
+        </div>
+      </div>
+
+      <div class="grid two section">
+        <div class="card">
+          <h3>Source performance — spend vs result</h3>
+          <div style="overflow-x:auto"><table id="tblSource"></table></div>
+        </div>
+        <div class="card">
+          <h3>Booking mix by source</h3>
+          <div class="chartbox"><canvas id="chSourceMix"></canvas></div>
+        </div>
+      </div>
+
+      <div class="card section">
+        <h3>Site P&amp;L — with central cost allocated by revenue share</h3>
+        <div style="overflow-x:auto"><table id="tblSite"></table></div>
+        <p class="hint" style="margin-top:10px">Central marketing &amp; CP-sourcing costs are spread across sites in proportion to each site's revenue for the period, so every site carries its fair share of the machine that feeds it.</p>
+      </div>
+
+      <div class="card section">
+        <h3>Overheads &amp; unattributed spend</h3>
+        <div style="overflow-x:auto"><table id="tblOverhead"></table></div>
+      </div>
+    </section>
+
+    <!-- ═══ FORECAST ═══ -->
+    <section class="view" id="view-forecast">
+      <div class="grid kpis" id="fcCards"></div>
+      <div class="card section">
+        <h3>Revenue trajectory — actual &amp; 3-month projection</h3>
+        <div class="chartbox" style="height:320px"><canvas id="chForecast"></canvas></div>
+        <p class="hint" style="margin-top:10px">Projection is a least-squares trend on monthly revenue; the band is ±1 typical monthly deviation. Treat it as direction, not gospel — one big launch changes everything.</p>
+      </div>
+      <div class="card section">
+        <h3>Project pacing vs FY target</h3>
+        <div style="overflow-x:auto"><table id="tblPacing"></table></div>
+      </div>
+    </section>
+
+    <!-- ═══ INSIGHTS ═══ -->
+    <section class="view" id="view-insights">
+      <div id="insightList"></div>
+    </section>
+
+    <!-- ═══ NEW BOOKING ═══ -->
+    <section class="view" id="view-sale">
+      <div class="card">
+        <h3>Record a booking</h3>
+        <div class="formgrid">
+          <div class="field"><label>Date</label><input type="date" id="sDate"></div>
+          <div class="field"><label>Project</label><select id="sProject"></select></div>
+          <div class="field"><label>Unit no.</label><input id="sUnit" placeholder="A-1203"></div>
+          <div class="field"><label>Customer</label><input id="sCustomer" placeholder="Customer name"></div>
+          <div class="field"><label>Source</label><select id="sSource"></select></div>
+          <div class="field"><label>Sub-source</label><input id="sSub" placeholder="CP firm / campaign / referrer"></div>
+          <div class="field"><label>Sales person</label><input id="sPerson" placeholder="Name"></div>
+          <div class="field"><label>Agreement value (₹)</label><input type="number" id="sValue" placeholder="8500000"></div>
+          <div class="field"><label>Amount received (₹)</label><input type="number" id="sReceived" placeholder="500000"></div>
+          <div class="field"><label>Status</label><select id="sStatus">
+            <option>Booked</option><option>Agreement Done</option><option>Registered</option><option>Cancelled</option>
+          </select></div>
+        </div>
+        <div class="formfoot">
+          <button class="btn" id="saveSale">Save booking</button>
+          <span class="hint">Writes a row to Sales_Log in the Google Sheet.</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ NEW EXPENSE ═══ -->
+    <section class="view" id="view-expense">
+      <div class="card">
+        <h3>Record an expense</h3>
+        <div class="formgrid">
+          <div class="field"><label>Date</label><input type="date" id="eDate"></div>
+          <div class="field"><label>Scope</label><select id="eScope"></select></div>
+          <div class="field"><label>Category</label><select id="eCategory"></select></div>
+          <div class="field"><label>Amount (₹)</label><input type="number" id="eAmount" placeholder="250000"></div>
+          <div class="field" style="grid-column:1/-1"><label>Description</label><input id="eDesc" placeholder="e.g. Hinjewadi flyover hoarding, Aug rent"></div>
+        </div>
+        <div class="formfoot">
+          <button class="btn" id="saveExpense">Save expense</button>
+          <span class="hint">Scope "CENTRAL" = shared marketing / CP-sourcing cost, allocated across sites automatically.</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ PROJECTS ═══ -->
+    <section class="view" id="view-projects">
+      <div class="card">
+        <h3>Add project</h3>
+        <div class="formgrid">
+          <div class="field"><label>Project name</label><input id="pName" placeholder="Mangalam …"></div>
+          <div class="field"><label>Location</label><input id="pLoc" placeholder="Pune / PCMC"></div>
+          <div class="field"><label>Total units</label><input type="number" id="pUnits"></div>
+          <div class="field"><label>FY target revenue (₹ Cr)</label><input type="number" id="pTargetRev" step="0.5"></div>
+          <div class="field"><label>FY target bookings</label><input type="number" id="pTargetBk"></div>
+        </div>
+        <div class="formfoot"><button class="btn" id="saveProject">Add project</button></div>
+      </div>
+      <div class="card section">
+        <h3>Project master</h3>
+        <div style="overflow-x:auto"><table id="tblProjects"></table></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ════════════════════════════════════════════════════════════
+   CONFIG — paste your Apps Script Web App /exec URL here.
+   Leave empty to explore with generated demo data.
+   ════════════════════════════════════════════════════════════ */
+const CONFIG = {
+  API_URL: ''   // e.g. 'https://script.google.com/macros/s/AKfycb.../exec'
+};
+
+/* ── state ── */
+let DB = { projects: [], sales: [], expenses: [], sources: [], expenseCategories: [] };
+let charts = {};
+const F = { fy: null, month: 'all', project: 'all' };
+const MONTHS = ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
+
+/* ── helpers ── */
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = v => {
+  const a = Math.abs(v);
+  if (a >= 1e7) return '₹' + (v/1e7).toFixed(2) + ' Cr';
+  if (a >= 1e5) return '₹' + (v/1e5).toFixed(1) + ' L';
+  return '₹' + Math.round(v).toLocaleString('en-IN');
+};
+const pct = v => (isFinite(v) ? (v*100).toFixed(1) + '%' : '–');
+const parseDate = s => new Date(s + 'T00:00:00');
+const fyOf = d => d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1;
+const fyLabel = fy => 'FY ' + fy + '–' + String(fy+1).slice(2);
+const monthKey = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+const fyMonths = fy => MONTHS.map((lbl,i) => {
+  const m = (i+3) % 12, y = i < 9 ? fy : fy+1;
+  return { key: y + '-' + String(m+1).padStart(2,'0'), label: lbl, y, m };
+});
+const toast = m => { const t=$('toast'); t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2800); };
+
+/* ── data access ── */
+async function apiGet(action) {
+  const r = await fetch(CONFIG.API_URL + '?action=' + action, { redirect: 'follow' });
+  return r.json();
+}
+async function apiPost(payload) {
+  const r = await fetch(CONFIG.API_URL, {
+    method: 'POST', redirect: 'follow',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(payload)
+  });
+  return r.json();
+}
+
+async function loadData() {
+  $('loader').style.display = 'flex';
+  try {
+    if (!CONFIG.API_URL) {
+      DB = demoData();
+      $('connDot').classList.add('demo');
+      $('connTxt').textContent = 'Demo data — set API_URL';
+    } else {
+      const d = await apiGet('data');
+      if (d.error) throw new Error(d.error);
+      DB = d;
+      $('connDot').classList.remove('demo');
+      $('connTxt').textContent = 'Live · Google Sheets';
+    }
+    initFilters();
+    renderAll();
+  } catch (err) {
+    $('loadmsg').textContent = 'Could not load data: ' + err.message;
+    return;
+  }
+  $('loader').style.display = 'none';
+}
+
+/* ── normalise rows ── */
+function normSales() {
+  return DB.sales.map(r => ({
+    id: r['Booking ID'], date: parseDate(r['Date']), project: r['Project'],
+    source: r['Source'], sub: r['Sub-Source'], person: r['Sales Person'],
+    value: Number(r['Agreement Value']) || 0, received: Number(r['Amount Received']) || 0,
+    status: r['Status'] || 'Booked'
+  })).filter(s => s.date && !isNaN(s.date));
+}
+function normExpenses() {
+  const map = {};
+  (DB.expenseCategories || []).forEach(c => map[c.category] = c.source);
+  return DB.expenses.map(r => ({
+    id: r['Expense ID'], date: parseDate(r['Date']), scope: r['Scope'] || 'CENTRAL',
+    category: r['Category'], desc: r['Description'],
+    amount: Number(r['Amount']) || 0,
+    source: map[r['Category']] || 'Other'
+  })).filter(e => e.date && !isNaN(e.date));
+}
+
+/* ── filters ── */
+function initFilters() {
+  const sales = normSales(), exps = normExpenses();
+  const fys = new Set([fyOf(new Date())]);
+  sales.forEach(s => fys.add(fyOf(s.date)));
+  exps.forEach(e => fys.add(fyOf(e.date)));
+  const sorted = [...fys].sort((a,b)=>b-a);
+  if (F.fy === null || !fys.has(F.fy)) F.fy = sorted[0];
+  $('fFY').innerHTML = sorted.map(y => `<option value="${y}" ${y===F.fy?'selected':''}>${fyLabel(y)}</option>`).join('');
+  $('fMonth').innerHTML = '<option value="all">Full year</option>' + MONTHS.map((m,i)=>`<option value="${i}" ${String(i)===String(F.month)?'selected':''}>${m}</option>`).join('');
+  const projNames = DB.projects.map(p => p['Project Name']);
+  $('fProject').innerHTML = '<option value="all">All projects</option>' + projNames.map(p=>`<option ${p===F.project?'selected':''}>${esc(p)}</option>`).join('');
+  // entry form selects
+  $('sProject').innerHTML = projNames.map(p=>`<option>${esc(p)}</option>`).join('');
+  $('sSource').innerHTML = (DB.sources||[]).map(s=>`<option>${esc(s)}</option>`).join('');
+  $('eScope').innerHTML = '<option>CENTRAL</option>' + projNames.map(p=>`<option>${esc(p)}</option>`).join('');
+  $('eCategory').innerHTML = (DB.expenseCategories||[]).map(c=>`<option>${esc(c.category)}</option>`).join('');
+  $('sDate').valueAsDate = new Date(); $('eDate').valueAsDate = new Date();
+}
+
+function inRange(d) {
+  if (fyOf(d) !== F.fy) return false;
+  if (F.month !== 'all') {
+    const wantM = (Number(F.month)+3) % 12;
+    if (d.getMonth() !== wantM) return false;
+  }
+  return true;
+}
+
+/* ════════════════ ANALYTICS ENGINE ════════════════ */
+function analyse() {
+  const allSales = normSales(), allExps = normExpenses();
+  const projFilter = s => F.project === 'all' || s === F.project;
+
+  // period slices (FY + month filter)
+  const sales = allSales.filter(s => inRange(s.date));
+  const exps  = allExps.filter(e => inRange(e.date));
+  const active = sales.filter(s => s.status !== 'Cancelled');
+  const cancelled = sales.filter(s => s.status === 'Cancelled');
+
+  // full-FY monthly series (ignores month filter — used for trends/forecast)
+  const months = fyMonths(F.fy);
+  const series = months.map(m => ({ ...m, revenue:0, bookings:0, expense:0, cancel:0 }));
+  const idx = {}; months.forEach((m,i)=>idx[m.key]=i);
+  allSales.forEach(s => {
+    const i = idx[monthKey(s.date)];
+    if (i === undefined || !projFilter(s.project)) return;
+    if (s.status === 'Cancelled') { series[i].cancel++; return; }
+    series[i].revenue += s.value; series[i].bookings++;
+  });
+  allExps.forEach(e => {
+    const i = idx[monthKey(e.date)];
+    if (i === undefined) return;
+    if (F.project !== 'all' && e.scope !== 'CENTRAL' && e.scope !== F.project) return;
+    series[i].expense += e.amount;   // note: central included fully when a project is selected? no — allocate below
+  });
+  // For a single-project view, replace expense series with direct + allocated share
+  if (F.project !== 'all') {
+    series.forEach(m => m.expense = 0);
+    const revByProjMonth = {};   // key|proj -> revenue
+    allSales.filter(s=>s.status!=='Cancelled').forEach(s => {
+      const k = monthKey(s.date); revByProjMonth[k] = revByProjMonth[k] || {};
+      revByProjMonth[k][s.project] = (revByProjMonth[k][s.project]||0) + s.value;
+    });
+    allExps.forEach(e => {
+      const i = idx[monthKey(e.date)]; if (i===undefined) return;
+      if (e.scope === F.project) series[i].expense += e.amount;
+      else if (e.scope === 'CENTRAL') {
+        const rm = revByProjMonth[monthKey(e.date)] || {};
+        const tot = Object.values(rm).reduce((a,b)=>a+b,0);
+        const share = tot > 0 ? (rm[F.project]||0)/tot : 1/Math.max(1,DB.projects.length);
+        series[i].expense += e.amount * share;
+      }
+    });
+  }
+
+  // period totals (respect month + project filters, with allocation)
+  const perSales = active.filter(s => projFilter(s.project));
+  const revenue = perSales.reduce((a,s)=>a+s.value,0);
+  const bookings = perSales.length;
+  const received = perSales.reduce((a,s)=>a+s.received,0);
+  let expense = 0;
+  if (F.project === 'all') expense = exps.reduce((a,e)=>a+e.amount,0);
+  else {
+    const revByProj = {};
+    active.forEach(s => revByProj[s.project]=(revByProj[s.project]||0)+s.value);
+    const totRev = Object.values(revByProj).reduce((a,b)=>a+b,0);
+    exps.forEach(e => {
+      if (e.scope === F.project) expense += e.amount;
+      else if (e.scope === 'CENTRAL')
+        expense += e.amount * (totRev>0 ? (revByProj[F.project]||0)/totRev : 1/Math.max(1,DB.projects.length));
+    });
+  }
+
+  // source table
+  const bySource = {};
+  (DB.sources||[]).forEach(s => bySource[s] = { spend:0, bookings:0, revenue:0 });
+  perSales.forEach(s => {
+    if (!bySource[s.source]) bySource[s.source]={spend:0,bookings:0,revenue:0};
+    bySource[s.source].bookings++; bySource[s.source].revenue += s.value;
+  });
+  const overheads = {};
+  exps.forEach(e => {
+    if (F.project !== 'all' && e.scope !== 'CENTRAL' && e.scope !== F.project) return;
+    if (bySource[e.source]) bySource[e.source].spend += e.amount;
+    else overheads[e.source] = (overheads[e.source]||0) + e.amount;
+  });
+
+  // site table (FY-or-month period, all projects always shown)
+  const sites = DB.projects.map(p => {
+    const name = p['Project Name'];
+    const ps = active.filter(s => s.project === name);
+    return {
+      name, status: p['Status'],
+      targetRev: (Number(p['FY Target Revenue (Cr)'])||0)*1e7,
+      targetBk: Number(p['FY Target Bookings'])||0,
+      revenue: ps.reduce((a,s)=>a+s.value,0),
+      bookings: ps.length,
+      direct: exps.filter(e=>e.scope===name).reduce((a,e)=>a+e.amount,0),
+      allocated: 0
+    };
+  });
+  const centralTotal = exps.filter(e=>e.scope==='CENTRAL').reduce((a,e)=>a+e.amount,0);
+  const totSiteRev = sites.reduce((a,s)=>a+s.revenue,0);
+  sites.forEach(s => s.allocated = centralTotal * (totSiteRev>0 ? s.revenue/totSiteRev : 1/Math.max(1,sites.length)));
+
+  // FY pacing (always full FY, project-filtered sales)
+  const fySales = allSales.filter(s => fyOf(s.date)===F.fy && s.status!=='Cancelled');
+  const now = new Date();
+  const fyStart = new Date(F.fy,3,1), fyEnd = new Date(F.fy+1,2,31);
+  const elapsed = Math.min(1, Math.max(0.04,(Math.min(now,fyEnd)-fyStart)/(fyEnd-fyStart)));
+  const pacing = DB.projects.map(p => {
+    const name=p['Project Name'];
+    const rev = fySales.filter(s=>s.project===name).reduce((a,s)=>a+s.value,0);
+    const bk = fySales.filter(s=>s.project===name).length;
+    const tR = (Number(p['FY Target Revenue (Cr)'])||0)*1e7;
+    const tB = Number(p['FY Target Bookings'])||0;
+    return { name, rev, bk, tR, tB,
+      pace: tR>0 ? (rev/tR)/elapsed : null,
+      achievedPct: tR>0 ? rev/tR : null };
+  });
+
+  // forecast: OLS over months with any activity so far
+  const upto = series.filter(m => new Date(m.y, m.m+1, 0) <= now);
+  const activeMonths = upto.length ? upto : series.slice(0,1);
+  const ys = activeMonths.map(m=>m.revenue);
+  const fc = forecast(ys, 3);
+  const fyToDateRev = ys.reduce((a,b)=>a+b,0);
+  const remaining = 12 - activeMonths.length;
+  const fcFyTotal = fyToDateRev + fc.next.slice(0, remaining).reduce((a,b)=>a+b,0)
+    + Math.max(0, remaining-3) * (fc.next[2]||0);
+
+  // health score
+  const health = healthScore({ series: activeMonths, revenue, expense, bookings,
+    cancelRate: sales.length ? cancelled.length/sales.length : 0,
+    bySource, pacing, elapsed });
+
+  return { sales:perSales, cancelled, revenue, bookings, received, expense,
+    bySource, overheads, sites, series, pacing, elapsed, fc, activeMonths,
+    fyToDateRev, fcFyTotal, health, centralTotal };
+}
+
+function forecast(ys, n) {
+  const k = ys.length;
+  if (k < 2) return { next: Array(n).fill(ys[0]||0), band: 0, slope: 0 };
+  const xs = ys.map((_,i)=>i);
+  const mx = (k-1)/2, my = ys.reduce((a,b)=>a+b,0)/k;
+  let num=0, den=0;
+  xs.forEach((x,i)=>{ num+=(x-mx)*(ys[i]-my); den+=(x-mx)*(x-mx); });
+  const slope = den? num/den : 0, icpt = my - slope*mx;
+  const resid = ys.map((y,i)=>y-(icpt+slope*i));
+  const rmse = Math.sqrt(resid.reduce((a,r)=>a+r*r,0)/k);
+  const next = Array.from({length:n},(_,j)=>Math.max(0, icpt + slope*(k+j)));
+  return { next, band: rmse, slope };
+}
+
+function healthScore(x) {
+  const f = [];
+  // 1 · S&M cost ratio (target ≤8% of topline)
+  const ratio = x.revenue>0 ? x.expense/x.revenue : 1;
+  f.push({ name:'Cost of sale ratio', w:25, s:clamp(lin(ratio,0.18,0.08)), note: pct(ratio)+' of revenue' });
+  // 2 · revenue momentum (trend slope vs average)
+  const recent = x.series.slice(-4);
+  const avg = recent.reduce((a,m)=>a+m.revenue,0)/Math.max(1,recent.length);
+  const sl = forecast(recent.map(m=>m.revenue),1).slope;
+  const mom = avg>0 ? sl/avg : 0;
+  f.push({ name:'Revenue momentum', w:20, s:clamp(50 + mom*500), note:(mom>=0?'+':'')+pct(mom)+' / month' });
+  // 3 · cost per booking trend
+  const cpbNow = last(x.series.filter(m=>m.bookings>0).map(m=>m.expense/m.bookings));
+  const prior = x.series.filter(m=>m.bookings>0).slice(0,-1);
+  const cpbAvg = prior.length? prior.reduce((a,m)=>a+m.expense/m.bookings,0)/prior.length : cpbNow;
+  const chg = cpbAvg>0 && cpbNow!=null ? (cpbNow-cpbAvg)/cpbAvg : 0;
+  f.push({ name:'Cost / booking trend', w:15, s:clamp(50 - chg*250), note:(chg>=0?'+':'')+pct(chg)+' vs run-rate' });
+  // 4 · source diversification (1 − HHI)
+  const shares = Object.values(x.bySource).map(s=>s.bookings).filter(v=>v>0);
+  const tot = shares.reduce((a,b)=>a+b,0);
+  const hhi = tot? shares.reduce((a,v)=>a+Math.pow(v/tot,2),0) : 1;
+  const nsrc = Math.max(2, shares.length);
+  f.push({ name:'Source diversification', w:15, s:clamp((1-hhi)/(1-1/nsrc)*100), note:'HHI '+hhi.toFixed(2) });
+  // 5 · cancellation
+  f.push({ name:'Cancellation control', w:10, s:clamp(lin(x.cancelRate,0.10,0)), note:pct(x.cancelRate)+' cancelled' });
+  // 6 · target pacing
+  const paces = x.pacing.filter(p=>p.pace!=null).map(p=>p.pace);
+  const pAvg = paces.length? paces.reduce((a,b)=>a+b,0)/paces.length : 1;
+  f.push({ name:'Target pacing', w:15, s:clamp(pAvg*100), note:pct(pAvg)+' of expected pace' });
+
+  const score = Math.round(f.reduce((a,i)=>a+i.s*i.w,0)/100);
+  return { score, factors: f };
+}
+const clamp = v => Math.max(0, Math.min(100, v));
+const lin = (v, bad, good) => (bad-v)/(bad-good)*100;      // maps bad→0, good→100
+const last = arr => arr.length ? arr[arr.length-1] : null;
+
+/* ════════════════ INSIGHTS ENGINE ════════════════ */
+function buildInsights(A) {
+  const out = [];
+  const src = Object.entries(A.bySource).filter(([,v])=>v.spend>0||v.bookings>0);
+
+  // pacing risks
+  A.pacing.filter(p=>p.pace!=null && p.tR>0).forEach(p => {
+    if (p.pace < 0.7) out.push({ level:'risk', title:`${p.name} is behind plan`,
+      body:`Booked ${fmt(p.rev)} against a ${fmt(p.tR)} FY target — ${pct(p.achievedPct)} achieved with ${pct(A.elapsed)} of the year gone. At this pace it lands near ${fmt(p.rev/Math.max(.01,A.elapsed))} by March. It needs roughly ${fmt(Math.max(0,(p.tR-p.rev))/Math.max(1,Math.round(12*(1-A.elapsed))))} per remaining month to close the gap.` });
+    else if (p.pace > 1.15) out.push({ level:'good', title:`${p.name} is ahead of plan`,
+      body:`Running at ${pct(p.pace)} of expected pace (${pct(p.achievedPct)} of FY target already booked). Consider whether inventory release or price escalation should follow the demand.` });
+  });
+
+  // source concentration
+  const totBk = src.reduce((a,[,v])=>a+v.bookings,0);
+  src.forEach(([name,v]) => {
+    if (totBk >= 8 && v.bookings/totBk > 0.45)
+      out.push({ level:'warn', title:`Heavy dependence on ${name}`,
+        body:`${name} delivers ${pct(v.bookings/totBk)} of bookings. If that channel softens — CP relationships shift, a hoarding contract lapses, digital costs spike — the funnel takes a direct hit. Worth deliberately growing a second engine.` });
+  });
+
+  // ROI ranking
+  const roi = src.filter(([,v])=>v.spend>0).map(([n,v])=>({n, roi:v.revenue/v.spend, cpb:v.bookings?v.spend/v.bookings:null, ...v}))
+    .sort((a,b)=>b.roi-a.roi);
+  if (roi.length >= 2) {
+    const best = roi[0], worst = roi[roi.length-1];
+    if (best.roi > worst.roi*1.8 && worst.spend > 0)
+      out.push({ level:'warn', title:`Budget efficiency gap: ${best.n} vs ${worst.n}`,
+        body:`Every rupee on ${best.n} returns ${best.roi.toFixed(1)}× in agreement value; ${worst.n} returns ${worst.roi.toFixed(1)}×. Before the next spend cycle, test shifting 15–20% of the ${worst.n} budget toward ${best.n} and watch cost per booking for a month.` });
+    out.push({ level:'good', title:`${best.n} is your most efficient channel`,
+      body:`${fmt(best.spend)} spent → ${best.bookings} bookings → ${fmt(best.revenue)} revenue (${best.roi.toFixed(1)}× return${best.cpb?`, ${fmt(best.cpb)} per booking`:''}).` });
+  }
+
+  // expense growth vs revenue growth
+  const s = A.activeMonths;
+  if (s.length >= 3) {
+    const g = a => a.at(-1) > 0 && a.at(-2) > 0 ? a.at(-1)/a.at(-2) - 1 : null;
+    const revG = g(s.map(m=>m.revenue)), expG = g(s.map(m=>m.expense));
+    if (revG!=null && expG!=null && expG > revG + 0.15)
+      out.push({ level:'warn', title:'Spend is growing faster than revenue',
+        body:`Last month expenses moved ${pct(expG)} while revenue moved ${pct(revG)}. One month is noise; two is a pattern — check which category is climbing on the Pulse page.` });
+  }
+
+  // cancellations
+  const cr = A.sales.length + A.cancelled.length > 0 ? A.cancelled.length/(A.sales.length+A.cancelled.length) : 0;
+  if (cr > 0.08) out.push({ level:'risk', title:'Cancellation rate needs attention',
+    body:`${pct(cr)} of bookings in this period cancelled. Every cancellation is a paid-for lead burned twice. Review token-to-agreement follow-up discipline and loan-approval screening at booking.` });
+
+  // free channels
+  const free = ['Referral','Direct Walk-in'].map(n=>A.bySource[n]).filter(Boolean);
+  const freeBk = free.reduce((a,v)=>a+v.bookings,0);
+  if (totBk>0 && freeBk/totBk > 0.2)
+    out.push({ level:'good', title:'Organic engine is real',
+      body:`Referrals and direct walk-ins account for ${pct(freeBk/totBk)} of bookings at near-zero acquisition cost — a sign of brand pull and customer satisfaction. A structured referral reward program could amplify this cheaply.` });
+
+  // forecast vs target
+  const tTot = A.pacing.reduce((a,p)=>a+p.tR,0);
+  if (tTot>0) {
+    const gap = A.fcFyTotal - tTot;
+    out.push({ level: gap>=0?'good':'warn', title: gap>=0?'Trend says target is reachable':'Trend falls short of FY target',
+      body:`Current trajectory projects ~${fmt(A.fcFyTotal)} by March against ${fmt(tTot)} targeted (${gap>=0?'+':''}${fmt(gap)}). ${gap<0?'Closing it means either lifting monthly run-rate to '+fmt((tTot-A.fyToDateRev)/Math.max(1,12-A.activeMonths.length))+' or pulling a launch forward.':'Protect the pace — the risk now is complacency in H2.'}` });
+  }
+
+  if (!out.length) out.push({ level:'good', title:'Nothing on fire', body:'No rule tripped for this period. Add more data or widen the date range for richer signals.' });
+  const rank = { risk:0, warn:1, good:2 };
+  return out.sort((a,b)=>rank[a.level]-rank[b.level]);
+}
+
+/* ════════════════ RENDER ════════════════ */
+function renderAll() {
+  const A = analyse();
+  renderKPIs(A); renderHealth(A); renderCharts(A);
+  renderSourceTable(A); renderSiteTable(A); renderOverheads(A);
+  renderForecast(A); renderInsights(A); renderProjects();
+}
+
+function renderKPIs(A) {
+  const cpb = A.bookings ? A.expense/A.bookings : null;
+  const net = A.revenue - A.expense;
+  const cards = [
+    ['Revenue booked', fmt(A.revenue), A.bookings + ' bookings'],
+    ['Total S&M spend', fmt(A.expense), pct(A.revenue?A.expense/A.revenue:NaN) + ' of revenue'],
+    ['Net of spend', fmt(net), net>=0?'contribution positive':'spend exceeds revenue', net>=0?'up':'down'],
+    ['Cost per booking', cpb!=null?fmt(cpb):'–', 'blended, all sources'],
+    ['Avg ticket size', A.bookings?fmt(A.revenue/A.bookings):'–', 'agreement value'],
+    ['Collections', fmt(A.received), 'received against bookings']
+  ];
+  $('kpiRow').innerHTML = cards.map(([l,v,d,cls]) =>
+    `<div class="card kpi"><div class="lbl">${l}</div><div class="val num">${v}</div><div class="delta ${cls||'flat'}">${d}</div></div>`).join('');
+}
+
+function renderHealth(A) {
+  const h = A.health;
+  $('healthN').textContent = h.score;
+  const arc = $('dialArc');
+  const col = h.score>=70?'#43BD8B':h.score>=45?'#D9A94C':'#E06552';
+  arc.style.stroke = col;
+  arc.style.transition = 'stroke-dashoffset .8s ease';
+  requestAnimationFrame(()=>arc.style.strokeDashoffset = 490 - 490*(h.score/100)*0.999);
+  $('healthN').style.color = col;
+  $('healthFactors').innerHTML = h.factors.map(f => {
+    const c = f.s>=70?'#43BD8B':f.s>=45?'#D9A94C':'#E06552';
+    return `<div class="factor"><span title="${esc(f.note)}">${f.name}</span>
+      <span class="bar"><i style="width:${f.s}%;background:${c}"></i></span>
+      <span class="sc num">${Math.round(f.s)}</span></div>`;
+  }).join('');
+}
+
+const chartDefaults = {
+  color:'#8A96AD',
+  font:{ family:'Archivo' }
+};
+function killChart(id){ if(charts[id]){charts[id].destroy(); delete charts[id];} }
+
+function renderCharts(A) {
+  Chart.defaults.color = '#8A96AD'; Chart.defaults.font.family = 'Archivo';
+  Chart.defaults.borderColor = 'rgba(35,48,73,.6)';
+  const labels = A.series.map(m=>m.label);
+
+  killChart('rev');
+  charts.rev = new Chart($('chRevExp'), {
+    data: { labels, datasets: [
+      { type:'bar', label:'Revenue', data:A.series.map(m=>m.revenue), backgroundColor:'rgba(217,169,76,.75)', borderRadius:4 },
+      { type:'line', label:'Spend', data:A.series.map(m=>m.expense), borderColor:'#E06552', backgroundColor:'#E06552', tension:.3, pointRadius:3 }
+    ]},
+    options: { maintainAspectRatio:false, plugins:{ legend:{position:'bottom'} , tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmt(c.raw)}}},
+      scales:{ y:{ ticks:{ callback:v=>fmt(v) } } } }
+  });
+
+  killChart('mix');
+  const entries = Object.entries(A.bySource).filter(([,v])=>v.bookings>0);
+  charts.mix = new Chart($('chSourceMix'), {
+    type:'doughnut',
+    data:{ labels: entries.map(([n])=>n),
+      datasets:[{ data: entries.map(([,v])=>v.bookings),
+        backgroundColor:['#D9A94C','#43BD8B','#5B8DEF','#E3A13B','#B07CC6','#E06552'], borderColor:'#131B2C', borderWidth:3 }]},
+    options:{ maintainAspectRatio:false, cutout:'62%', plugins:{ legend:{position:'bottom'} } }
+  });
+}
+
+function renderSourceTable(A) {
+  const rows = Object.entries(A.bySource).map(([name,v]) => ({ name, ...v,
+    cpb: v.bookings? v.spend/v.bookings : null,
+    roi: v.spend>0? v.revenue/v.spend : null
+  })).filter(r=>r.spend>0||r.bookings>0).sort((a,b)=>b.revenue-a.revenue);
+  $('tblSource').innerHTML = `<tr><th>Source</th><th class="r">Spend</th><th class="r">Bookings</th><th class="r">Revenue</th><th class="r">Cost / booking</th><th class="r">Return ×</th></tr>` +
+    (rows.length? rows.map(r=>`<tr><td>${esc(r.name)}</td><td class="r num">${fmt(r.spend)}</td><td class="r num">${r.bookings}</td>
+      <td class="r num">${fmt(r.revenue)}</td><td class="r num">${r.cpb!=null?fmt(r.cpb):'–'}</td>
+      <td class="r num">${r.roi!=null? '<span class="pill '+(r.roi>=15?'good':r.roi>=8?'warn':'risk')+'">'+r.roi.toFixed(1)+'×</span>':'∞'}</td></tr>`).join('')
+    : '<tr><td colspan="6" class="empty">No activity in this period</td></tr>');
+}
+
+function renderSiteTable(A) {
+  $('tblSite').innerHTML = `<tr><th>Site</th><th class="r">Bookings</th><th class="r">Revenue</th><th class="r">Direct spend</th><th class="r">Allocated central</th><th class="r">Contribution</th><th class="r">Margin</th></tr>` +
+    A.sites.map(s => {
+      const contrib = s.revenue - s.direct - s.allocated;
+      const m = s.revenue>0? contrib/s.revenue : null;
+      return `<tr><td>${esc(s.name)}</td><td class="r num">${s.bookings}</td><td class="r num">${fmt(s.revenue)}</td>
+        <td class="r num">${fmt(s.direct)}</td><td class="r num">${fmt(s.allocated)}</td>
+        <td class="r num" style="color:${contrib>=0?'var(--jade)':'var(--ember)'}">${fmt(contrib)}</td>
+        <td class="r num">${m!=null?pct(m):'–'}</td></tr>`;
+    }).join('');
+}
+
+function renderOverheads(A) {
+  const rows = Object.entries(A.overheads);
+  $('tblOverhead').innerHTML = `<tr><th>Bucket</th><th class="r">Amount</th><th class="r">% of revenue</th></tr>` +
+    (rows.length? rows.map(([n,v])=>`<tr><td>${esc(n)}</td><td class="r num">${fmt(v)}</td><td class="r num">${pct(A.revenue?v/A.revenue:NaN)}</td></tr>`).join('')
+    : '<tr><td colspan="3" class="empty">No overhead entries in this period</td></tr>');
+}
+
+function renderForecast(A) {
+  const tTot = A.pacing.reduce((a,p)=>a+p.tR,0);
+  const monthsLeft = Math.max(0, 12 - A.activeMonths.length);
+  const needed = monthsLeft>0 ? Math.max(0,(tTot - A.fyToDateRev))/monthsLeft : 0;
+  $('fcCards').innerHTML = [
+    ['Next 3 months (projected)', fmt(A.fc.next.reduce((a,b)=>a+b,0)), 'least-squares trend'],
+    ['FY landing (projected)', fmt(A.fcFyTotal), tTot? pct(A.fcFyTotal/tTot)+' of target' : 'no targets set'],
+    ['FY target (all sites)', tTot?fmt(tTot):'–', 'from project master'],
+    ['Run-rate needed', monthsLeft? fmt(needed):'–', monthsLeft+' months remain']
+  ].map(([l,v,d])=>`<div class="card kpi"><div class="lbl">${l}</div><div class="val num">${v}</div><div class="delta flat">${d}</div></div>`).join('');
+
+  const actual = A.activeMonths.map(m=>m.revenue);
+  const labels = [...A.series.map(m=>m.label)];
+  const fcLine = Array(labels.length).fill(null);
+  const bandHi = Array(labels.length).fill(null), bandLo = Array(labels.length).fill(null);
+  let k = actual.length - 1;
+  if (k >= 0) { fcLine[k] = actual[k]; bandHi[k]=actual[k]; bandLo[k]=actual[k]; }
+  A.fc.next.forEach((v,j) => {
+    const i = k+1+j;
+    if (i < labels.length) { fcLine[i]=v; bandHi[i]=v+A.fc.band; bandLo[i]=Math.max(0,v-A.fc.band); }
+  });
+
+  killChart('fc');
+  charts.fc = new Chart($('chForecast'), {
+    data:{ labels, datasets:[
+      { type:'bar', label:'Actual revenue', data:[...actual, ...Array(labels.length-actual.length).fill(null)], backgroundColor:'rgba(217,169,76,.75)', borderRadius:4 },
+      { type:'line', label:'Projection', data:fcLine, borderColor:'#43BD8B', borderDash:[6,5], tension:.25, pointRadius:3, backgroundColor:'#43BD8B' },
+      { type:'line', label:'Band (high)', data:bandHi, borderColor:'rgba(67,189,139,.0)', backgroundColor:'rgba(67,189,139,.10)', fill:'+1', pointRadius:0 },
+      { type:'line', label:'Band (low)', data:bandLo, borderColor:'rgba(67,189,139,.0)', pointRadius:0 }
+    ]},
+    options:{ maintainAspectRatio:false,
+      plugins:{ legend:{position:'bottom', labels:{filter:i=>!i.text.startsWith('Band')}},
+        tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmt(c.raw)}} },
+      scales:{ y:{ ticks:{ callback:v=>fmt(v) } } } }
+  });
+
+  $('tblPacing').innerHTML = `<tr><th>Project</th><th class="r">FY revenue</th><th class="r">Target</th><th class="r">Achieved</th><th>Pace vs time</th><th class="r">Verdict</th></tr>` +
+    A.pacing.map(p => {
+      const w = p.achievedPct!=null? Math.min(100,p.achievedPct*100) : 0;
+      const col = p.pace==null? 'var(--faint)' : p.pace>=0.95?'var(--jade)': p.pace>=0.7?'var(--amber)':'var(--ember)';
+      const verdict = p.pace==null?'no target': p.pace>=0.95?'on track': p.pace>=0.7?'watch':'behind';
+      return `<tr><td>${esc(p.name)}</td><td class="r num">${fmt(p.rev)}</td><td class="r num">${p.tR?fmt(p.tR):'–'}</td>
+        <td class="r num">${p.achievedPct!=null?pct(p.achievedPct):'–'}</td>
+        <td><div class="pace"><i style="width:${w}%;background:${col}"></i></div></td>
+        <td class="r"><span class="pill ${p.pace==null?'warn':p.pace>=0.95?'good':p.pace>=0.7?'warn':'risk'}">${verdict}</span></td></tr>`;
+    }).join('');
+}
+
+function renderInsights(A) {
+  $('insightList').innerHTML = buildInsights(A).map(i =>
+    `<div class="insight ${i.level}"><h4>${esc(i.title)}</h4><p>${esc(i.body)}</p></div>`).join('');
+}
+
+function renderProjects() {
+  $('tblProjects').innerHTML = `<tr><th>ID</th><th>Name</th><th>Location</th><th class="r">Units</th><th class="r">FY target (Cr)</th><th class="r">Target bookings</th><th>Status</th></tr>` +
+    DB.projects.map(p=>`<tr><td class="num">${esc(p['Project ID'])}</td><td>${esc(p['Project Name'])}</td><td>${esc(p['Location'])}</td>
+      <td class="r num">${esc(p['Total Units'])}</td><td class="r num">${esc(p['FY Target Revenue (Cr)'])}</td>
+      <td class="r num">${esc(p['FY Target Bookings'])}</td><td><span class="pill ${p['Status']==='Active'?'good':'warn'}">${esc(p['Status'])}</span></td></tr>`).join('');
+}
+
+/* ════════════════ WRITE ACTIONS ════════════════ */
+async function submit(btn, payload, localApply) {
+  btn.disabled = true;
+  try {
+    if (!CONFIG.API_URL) { localApply(); toast('Saved to demo session (set API_URL to persist)'); }
+    else {
+      const r = await apiPost(payload);
+      if (r.error) throw new Error(r.error);
+      toast('Saved · ' + (r.id || 'ok'));
+      const d = await apiGet('data'); if (!d.error) DB = d;
+    }
+    initFilters(); renderAll();
+  } catch (e) { toast('Failed: ' + e.message); }
+  btn.disabled = false;
+}
+
+$('saveSale').onclick = function() {
+  const p = { action:'addSale', date:$('sDate').value, project:$('sProject').value, unit:$('sUnit').value,
+    customer:$('sCustomer').value, source:$('sSource').value, subSource:$('sSub').value,
+    salesPerson:$('sPerson').value, agreementValue:$('sValue').value, amountReceived:$('sReceived').value, status:$('sStatus').value };
+  if (!p.date || !p.project || !p.agreementValue) return toast('Date, project and agreement value are required');
+  submit(this, p, () => DB.sales.push({ 'Booking ID':'BK-DEMO','Date':p.date,'Project':p.project,'Unit':p.unit,'Customer':p.customer,
+    'Source':p.source,'Sub-Source':p.subSource,'Sales Person':p.salesPerson,'Agreement Value':p.agreementValue,'Amount Received':p.amountReceived,'Status':p.status }));
+};
+
+$('saveExpense').onclick = function() {
+  const p = { action:'addExpense', date:$('eDate').value, scope:$('eScope').value,
+    category:$('eCategory').value, description:$('eDesc').value, amount:$('eAmount').value };
+  if (!p.date || !p.category || !p.amount) return toast('Date, category and amount are required');
+  submit(this, p, () => DB.expenses.push({ 'Expense ID':'EX-DEMO','Date':p.date,'Scope':p.scope,'Category':p.category,'Description':p.description,'Amount':p.amount }));
+};
+
+$('saveProject').onclick = function() {
+  const p = { action:'addProject', name:$('pName').value, location:$('pLoc').value,
+    totalUnits:$('pUnits').value, targetRevenueCr:$('pTargetRev').value, targetBookings:$('pTargetBk').value };
+  if (!p.name) return toast('Project name is required');
+  submit(this, p, () => DB.projects.push({ 'Project ID':'PRJ-DEMO','Project Name':p.name,'Location':p.location,'Total Units':p.totalUnits,
+    'Status':'Active','FY Target Revenue (Cr)':p.targetRevenueCr,'FY Target Bookings':p.targetBookings }));
+};
+
+/* ════════════════ NAV & FILTERS ════════════════ */
+document.querySelectorAll('.navbtn').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.navbtn').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(x=>x.classList.remove('on'));
+  b.classList.add('active');
+  $('view-'+b.dataset.view).classList.add('on');
+  $('viewTitle').textContent = b.textContent.trim();
+});
+$('fFY').onchange = e => { F.fy = Number(e.target.value); renderAll(); };
+$('fMonth').onchange = e => { F.month = e.target.value; renderAll(); };
+$('fProject').onchange = e => { F.project = e.target.value; renderAll(); };
+$('refreshBtn').onclick = loadData;
+
+/* ════════════════ DEMO DATA ════════════════ */
+function demoData() {
+  const projects = [
+    { 'Project ID':'PRJ-001','Project Name':'Mangalam Midas City','Location':'PCMC','Total Units':400,'Status':'Active','FY Target Revenue (Cr)':120,'FY Target Bookings':180 },
+    { 'Project ID':'PRJ-002','Project Name':'Mangalam Myra','Location':'Pune','Total Units':220,'Status':'Active','FY Target Revenue (Cr)':80,'FY Target Bookings':110 },
+    { 'Project ID':'PRJ-003','Project Name':'Mangalam Momento','Location':'Pune','Total Units':160,'Status':'Active','FY Target Revenue (Cr)':55,'FY Target Bookings':70 }
+  ];
+  const sources = ['Hoarding','Digital Marketing','Channel Partner','Referral','Direct Walk-in'];
+  const expenseCategories = [
+    { category:'Hoarding & Outdoor', source:'Hoarding' },{ category:'Digital Marketing', source:'Digital Marketing' },
+    { category:'CP Brokerage', source:'Channel Partner' },{ category:'CP Team Salary', source:'Channel Partner' },
+    { category:'Referral Payout', source:'Referral' },{ category:'Sales Team Salary', source:'Sales Overhead' },
+    { category:'Marketing Team Salary', source:'Marketing Overhead' },{ category:'Events & Activations', source:'Marketing Overhead' },
+    { category:'Collaterals & Print', source:'Marketing Overhead' },{ category:'Other', source:'Other' }
+  ];
+  let seed = 42; const rnd = () => (seed = (seed*16807)%2147483647) / 2147483647;
+  const sales = [], expenses = [];
+  const srcMix = [['Channel Partner',.42],['Digital Marketing',.24],['Hoarding',.12],['Referral',.13],['Direct Walk-in',.09]];
+  const people = ['Rohit','Sneha','Amit','Pooja','Vikram','Kiran'];
+  let bk = 1, ex = 1;
+  // Apr 2025 → Aug 2026
+  for (let mi = 0; mi < 17; mi++) {
+    const d0 = new Date(2025, 3+mi, 1);
+    const growth = 1 + mi*0.035;
+    projects.forEach((p,pi) => {
+      const base = [6,4,3][pi];
+      const n = Math.max(1, Math.round(base*growth + (rnd()*3-1.5)));
+      for (let i=0;i<n;i++) {
+        const r = rnd(); let acc=0, src=srcMix[0][0];
+        for (const [nm,w] of srcMix){ acc+=w; if (r<=acc){src=nm;break;} }
+        const day = 1+Math.floor(rnd()*27);
+        const val = Math.round((5.5 + rnd()*4.5)*1e6/1e4)*1e4;
+        sales.push({ 'Booking ID':'BK-'+String(bk++).padStart(4,'0'),
+          'Date': `${d0.getFullYear()}-${String(d0.getMonth()+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`,
+          'Project': p['Project Name'], 'Unit': 'A-'+(100+Math.floor(rnd()*900)),
+          'Customer': 'Customer '+bk, 'Source': src, 'Sub-Source': src==='Channel Partner'?'CP Firm '+(1+Math.floor(rnd()*8)):'' ,
+          'Sales Person': people[Math.floor(rnd()*people.length)],
+          'Agreement Value': val, 'Amount Received': Math.round(val*(0.05+rnd()*0.15)),
+          'Status': rnd() < 0.05 ? 'Cancelled' : 'Booked' });
+      }
+    });
+    const dstr = dd => `${d0.getFullYear()}-${String(d0.getMonth()+1).padStart(2,'0')}-${String(dd).padStart(2,'0')}`;
+    const addE = (scope,cat,amt,desc) => expenses.push({ 'Expense ID':'EX-'+String(ex++).padStart(4,'0'),'Date':dstr(3+Math.floor(rnd()*22)),'Scope':scope,'Category':cat,'Description':desc,'Amount':Math.round(amt) });
+    addE('CENTRAL','Digital Marketing', (9+rnd()*5)*1e5*growth, 'Meta + Google campaigns');
+    addE('CENTRAL','Marketing Team Salary', 8.5e5, 'Central marketing payroll');
+    addE('CENTRAL','CP Team Salary', 6.5e5, 'CP sourcing payroll');
+    addE('CENTRAL','Events & Activations', (1+rnd()*3)*1e5, 'Society activations');
+    projects.forEach(p => {
+      addE(p['Project Name'],'Hoarding & Outdoor', (2+rnd()*3)*1e5, 'Site hoardings');
+      addE(p['Project Name'],'Sales Team Salary', (3.5+rnd())*1e5, 'Site sales payroll');
+      addE(p['Project Name'],'CP Brokerage', (4+rnd()*6)*1e5*growth, 'Brokerage payouts');
+      if (rnd()<.5) addE(p['Project Name'],'Referral Payout', (0.5+rnd())*1e5, 'Referral rewards');
+      if (rnd()<.4) addE(p['Project Name'],'Collaterals & Print', (0.3+rnd()*0.7)*1e5, 'Brochures, standees');
+    });
+  }
+  return { projects, sales, expenses, sources, expenseCategories, generatedAt: new Date().toISOString() };
+}
+
+loadData();
+</script>
+</body>
+</html>
