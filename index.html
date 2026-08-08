@@ -5,147 +5,239 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Mangalam Realtech · Business Pulse</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,300..800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
 :root{
-  --ink:#0C111C; --panel:#131B2C; --panel2:#0F1626; --line:#233049;
-  --brass:#D9A94C; --brass-dim:#8a6f38; --jade:#43BD8B; --ember:#E06552; --amber:#E3A13B;
-  --text:#EAEFF7; --muted:#8A96AD; --faint:#5A6478;
-  --radius:14px;
+  --bg:#050810; --glass:rgba(17,24,42,.55); --glass2:rgba(11,17,32,.65);
+  --line:rgba(120,150,210,.14); --line2:rgba(120,150,210,.28);
+  --brass:#EDB84D; --brass2:#DE9134; --cyan:#56E1FF; --jade:#3BE0A0; --ember:#FF6E61; --amber:#F0B44E; --violet:#9B85FF;
+  --text:#F0F4FC; --muted:#94A0BA; --faint:#5D6980;
+  --radius:18px;
+  --glow-brass:0 0 24px rgba(237,184,77,.25);
 }
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%}
+html{scroll-behavior:smooth}
+html,body{min-height:100%}
 body{
-  background:var(--ink); color:var(--text);
-  font-family:'Archivo',system-ui,sans-serif; font-size:14px;
-  background-image:radial-gradient(1200px 500px at 80% -10%, rgba(217,169,76,.06), transparent 60%);
+  background:var(--bg); color:var(--text);
+  font-family:'Space Grotesk',system-ui,sans-serif; font-size:14px;
+  background-image:
+    radial-gradient(900px 480px at 85% -8%, rgba(237,184,77,.10), transparent 60%),
+    radial-gradient(760px 480px at -10% 18%, rgba(86,225,255,.07), transparent 60%),
+    radial-gradient(700px 600px at 55% 110%, rgba(155,133,255,.06), transparent 60%);
+  background-attachment:fixed;
 }
-.num{font-family:'IBM Plex Mono',monospace}
+body::before{
+  content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
+  background-image:radial-gradient(rgba(140,165,220,.10) 1px, transparent 1px);
+  background-size:26px 26px;
+  mask-image:linear-gradient(180deg, rgba(0,0,0,.5), rgba(0,0,0,.12) 40%, transparent 75%);
+}
+.num{font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums}
 a{color:var(--brass)}
+::selection{background:rgba(237,184,77,.3)}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:rgba(120,150,210,.18);border-radius:6px;border:2px solid var(--bg)}
+::-webkit-scrollbar-track{background:transparent}
 
 /* ── shell ── */
-.shell{display:grid;grid-template-columns:216px 1fr;min-height:100vh}
-.rail{border-right:1px solid var(--line);padding:22px 14px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;gap:4px;background:var(--panel2)}
-.brand{padding:0 10px 18px}
-.brand .mark{font-weight:800;letter-spacing:.12em;font-size:12px;color:var(--brass);text-transform:uppercase}
-.brand h1{font-size:19px;font-weight:700;font-variation-settings:'wdth' 112;margin-top:2px}
-.brand .sub{color:var(--faint);font-size:11px;margin-top:3px;letter-spacing:.04em}
-.navlbl{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--faint);padding:14px 10px 6px}
-.navbtn{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:0;color:var(--muted);
-  padding:9px 10px;border-radius:9px;font:inherit;font-weight:500;cursor:pointer;transition:.15s}
-.navbtn:hover{color:var(--text);background:rgba(255,255,255,.04)}
-.navbtn.active{color:var(--brass);background:rgba(217,169,76,.10)}
-.navbtn .ic{width:17px;text-align:center;opacity:.9}
-.rail .foot{margin-top:auto;padding:10px;font-size:11px;color:var(--faint)}
-.dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;background:var(--jade)}
-.dot.demo{background:var(--amber)}
+.shell{display:grid;grid-template-columns:224px 1fr;min-height:100vh;position:relative;z-index:1}
+.rail{
+  padding:24px 14px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;gap:4px;
+  background:linear-gradient(180deg, rgba(13,19,36,.85), rgba(8,12,24,.85));
+  backdrop-filter:blur(20px); border-right:1px solid var(--line);
+}
+.brand{padding:2px 10px 20px;position:relative}
+.brand .mark{font-weight:600;letter-spacing:.22em;font-size:10px;color:var(--brass);text-transform:uppercase}
+.brand h1{font-size:20px;font-weight:700;letter-spacing:-.02em;margin-top:4px;
+  background:linear-gradient(92deg,#FFF 20%, #C9D4EC 60%, #8fa2c9);-webkit-background-clip:text;background-clip:text;color:transparent}
+.brand .sub{color:var(--faint);font-size:10.5px;margin-top:4px;letter-spacing:.08em;font-family:'JetBrains Mono',monospace}
+.brand::after{content:'';position:absolute;left:10px;right:10px;bottom:6px;height:1px;
+  background:linear-gradient(90deg, rgba(237,184,77,.5), rgba(86,225,255,.25), transparent)}
+.navlbl{font-size:9.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--faint);padding:16px 12px 7px;font-family:'JetBrains Mono',monospace}
+.navbtn{display:flex;align-items:center;gap:11px;width:100%;text-align:left;background:none;border:1px solid transparent;color:var(--muted);
+  padding:10px 12px;border-radius:12px;font:inherit;font-weight:500;font-size:13.5px;cursor:pointer;transition:.18s;position:relative}
+.navbtn:hover{color:var(--text);background:rgba(255,255,255,.045)}
+.navbtn.active{color:#FFE9BC;background:linear-gradient(95deg, rgba(237,184,77,.16), rgba(237,184,77,.05));
+  border-color:rgba(237,184,77,.28); box-shadow:inset 0 0 18px rgba(237,184,77,.06)}
+.navbtn.active::before{content:'';position:absolute;left:-14px;top:22%;bottom:22%;width:3px;border-radius:3px;
+  background:linear-gradient(180deg,var(--brass),var(--brass2));box-shadow:var(--glow-brass)}
+.navbtn .ic{width:18px;text-align:center;opacity:.95;font-size:13px}
+.rail .foot{margin-top:auto;padding:12px;font-size:10.5px;color:var(--faint);font-family:'JetBrains Mono',monospace;
+  border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.02)}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:7px;background:var(--jade);
+  box-shadow:0 0 8px var(--jade);animation:pulse 2.4s ease-in-out infinite}
+.dot.demo{background:var(--amber);box-shadow:0 0 8px var(--amber)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
 
-main{padding:26px 30px 60px;max-width:1240px;width:100%}
+main{padding:0 32px 70px;max-width:1280px;width:100%}
 
-/* ── filter bar ── */
-.filters{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:22px}
-.filters .title{font-size:22px;font-weight:700;font-variation-settings:'wdth' 110;margin-right:auto}
+/* ── command topbar (signature) ── */
+.filters{
+  display:flex;flex-wrap:wrap;gap:9px;align-items:center;
+  position:sticky;top:0;z-index:20;margin:0 -32px 26px;padding:16px 32px;
+  background:linear-gradient(180deg, rgba(8,12,24,.88), rgba(8,12,24,.72));
+  backdrop-filter:blur(18px);border-bottom:1px solid var(--line);overflow:hidden;
+}
+.filters::after{content:'';position:absolute;left:0;bottom:-1px;height:1px;width:34%;
+  background:linear-gradient(90deg, transparent, var(--cyan), transparent);
+  animation:scan 5.5s linear infinite;opacity:.6}
+@keyframes scan{0%{transform:translateX(-110%)}100%{transform:translateX(330%)}}
+.filters .title{font-size:21px;font-weight:700;letter-spacing:-.02em;margin-right:auto;display:flex;align-items:center;gap:11px}
+.filters .title::before{content:'';width:9px;height:9px;border-radius:3px;transform:rotate(45deg);
+  background:linear-gradient(135deg,var(--brass),var(--brass2));box-shadow:var(--glow-brass)}
 select,input,textarea{
-  background:var(--panel);border:1px solid var(--line);color:var(--text);
-  padding:8px 12px;border-radius:9px;font:inherit;font-size:13px;outline:none}
-select:focus,input:focus,textarea:focus{border-color:var(--brass-dim)}
-.btn{background:var(--brass);color:#171100;border:0;font-weight:700;padding:9px 18px;border-radius:9px;cursor:pointer;font:inherit;font-weight:700}
-.btn:hover{filter:brightness(1.08)}
-.btn.ghost{background:transparent;color:var(--brass);border:1px solid var(--brass-dim)}
-.btn:disabled{opacity:.5;cursor:wait}
+  background:var(--glass2);border:1px solid var(--line);color:var(--text);
+  padding:8px 13px;border-radius:11px;font:inherit;font-size:13px;outline:none;transition:.18s;
+  backdrop-filter:blur(8px)}
+select:hover,input:hover{border-color:var(--line2)}
+select:focus,input:focus,textarea:focus{border-color:rgba(237,184,77,.55);box-shadow:0 0 0 3px rgba(237,184,77,.12)}
+select{cursor:pointer}
+input[type=date]{color-scheme:dark}
+.btn{background:linear-gradient(135deg,var(--brass),var(--brass2));color:#1A1204;border:0;
+  padding:9px 20px;border-radius:11px;cursor:pointer;font:inherit;font-weight:700;letter-spacing:.01em;
+  box-shadow:var(--glow-brass), inset 0 1px 0 rgba(255,255,255,.35);transition:.18s}
+.btn:hover{transform:translateY(-1px);box-shadow:0 0 32px rgba(237,184,77,.4), inset 0 1px 0 rgba(255,255,255,.35)}
+.btn:active{transform:translateY(0)}
+.btn.ghost{background:rgba(237,184,77,.06);color:var(--brass);border:1px solid rgba(237,184,77,.35);box-shadow:none}
+.btn.ghost:hover{background:rgba(237,184,77,.14);box-shadow:var(--glow-brass)}
+.btn:disabled{opacity:.5;cursor:wait;transform:none}
 
 /* ── cards & grid ── */
-.grid{display:grid;gap:14px}
-.kpis{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;position:relative;overflow:hidden}
-.kpi .lbl{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
-.kpi .val{font-size:24px;font-weight:600;margin-top:7px;letter-spacing:-.01em}
-.kpi .delta{font-size:11.5px;margin-top:5px}
+.grid{display:grid;gap:16px}
+.kpis{grid-template-columns:repeat(auto-fit,minmax(185px,1fr))}
+.card{
+  background:var(--glass);border:1px solid var(--line);border-radius:var(--radius);
+  padding:18px 20px;position:relative;overflow:hidden;backdrop-filter:blur(16px);
+  box-shadow:0 14px 40px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.04);
+  transition:border-color .2s, transform .2s, box-shadow .2s;
+}
+.card::before{content:'';position:absolute;inset:0 0 auto 0;height:1px;
+  background:linear-gradient(90deg, transparent, rgba(255,255,255,.14), transparent)}
+.view.on .card{animation:rise .5s cubic-bezier(.2,.7,.2,1) both}
+.view.on .card:nth-child(2){animation-delay:.05s}.view.on .card:nth-child(3){animation-delay:.1s}
+.view.on .card:nth-child(4){animation-delay:.15s}.view.on .card:nth-child(5){animation-delay:.2s}.view.on .card:nth-child(6){animation-delay:.25s}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.kpi{cursor:default}
+.kpi:hover{transform:translateY(-3px);border-color:rgba(237,184,77,.35);box-shadow:0 18px 44px rgba(0,0,0,.45), var(--glow-brass)}
+.kpi .lbl{font-size:9.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);font-family:'JetBrains Mono',monospace}
+.kpi .val{font-size:25px;font-weight:600;margin-top:9px;letter-spacing:-.01em}
+.kpi .delta{font-size:11px;margin-top:5px;font-family:'JetBrains Mono',monospace;letter-spacing:-.01em}
+.kpi .spark{position:absolute;right:0;bottom:0;left:0;height:38px;opacity:.9;pointer-events:none}
 .up{color:var(--jade)} .down{color:var(--ember)} .flat{color:var(--muted)}
-.card h3{font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:14px}
+.card h3{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:16px;
+  font-family:'JetBrains Mono',monospace;display:flex;align-items:center;gap:9px}
+.card h3::before{content:'';width:16px;height:2px;border-radius:2px;flex:none;
+  background:linear-gradient(90deg,var(--brass),transparent)}
 .two{grid-template-columns:1.6fr 1fr}
 .chartbox{position:relative;height:280px}
 
-/* ── health dial (signature) ── */
-.health{display:grid;grid-template-columns:190px 1fr;gap:22px;align-items:center}
-.dialwrap{position:relative;width:180px;height:180px;margin:auto}
-.dialwrap svg{transform:rotate(-90deg)}
+/* ── health dial ── */
+.health{display:grid;grid-template-columns:200px 1fr;gap:24px;align-items:center}
+.dialwrap{position:relative;width:184px;height:184px;margin:auto}
+.dialwrap svg{transform:rotate(-90deg);overflow:visible}
+#dialArc{filter:drop-shadow(0 0 10px currentColor)}
 .dialscore{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
-.dialscore .n{font-size:42px;font-weight:700;line-height:1}
-.dialscore .t{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin-top:4px}
-.factors{display:flex;flex-direction:column;gap:9px}
-.factor{display:grid;grid-template-columns:150px 1fr 42px;gap:10px;align-items:center;font-size:12.5px}
-.factor .bar{height:6px;background:var(--panel2);border-radius:4px;overflow:hidden;border:1px solid var(--line)}
-.factor .bar i{display:block;height:100%;border-radius:4px}
-.factor .sc{text-align:right;color:var(--muted)}
+.dialscore .n{font-size:46px;font-weight:700;line-height:1;text-shadow:0 0 26px currentColor}
+.dialscore .t{font-size:9px;letter-spacing:.26em;text-transform:uppercase;color:var(--muted);margin-top:6px;font-family:'JetBrains Mono',monospace}
+.factors{display:flex;flex-direction:column;gap:10px}
+.factor{display:grid;grid-template-columns:150px 1fr 40px;gap:11px;align-items:center;font-size:12.5px;color:var(--muted)}
+.factor .bar{height:7px;background:rgba(8,12,24,.7);border-radius:5px;overflow:hidden;border:1px solid var(--line)}
+.factor .bar i{display:block;height:100%;border-radius:5px;box-shadow:0 0 10px currentColor;transition:width .7s cubic-bezier(.2,.7,.2,1)}
+.factor .sc{text-align:right;color:var(--text)}
 
 /* ── tables ── */
 table{width:100%;border-collapse:collapse;font-size:13px}
-th{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);font-weight:600}
-td{padding:9px 10px;border-bottom:1px solid rgba(35,48,73,.5)}
+th{font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);text-align:left;
+  padding:9px 11px;border-bottom:1px solid var(--line2);font-weight:600;font-family:'JetBrains Mono',monospace;white-space:nowrap}
+td{padding:10px 11px;border-bottom:1px solid var(--line)}
+tbody tr,tr{transition:background .15s}
+tr:hover td{background:rgba(120,150,210,.05)}
 tr:last-child td{border-bottom:0}
+td:first-child{font-weight:600;color:var(--text)}
 td.r,th.r{text-align:right}
-.pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600}
-.pill.good{background:rgba(67,189,139,.13);color:var(--jade)}
-.pill.warn{background:rgba(227,161,59,.13);color:var(--amber)}
-.pill.risk{background:rgba(224,101,82,.13);color:var(--ember)}
-.pace{height:6px;background:var(--panel2);border:1px solid var(--line);border-radius:4px;overflow:hidden;min-width:90px}
-.pace i{display:block;height:100%}
+.pill{display:inline-block;padding:3px 10px;border-radius:20px;font-size:10.5px;font-weight:600;font-family:'JetBrains Mono',monospace;letter-spacing:.02em}
+.pill.good{background:rgba(59,224,160,.12);color:var(--jade);border:1px solid rgba(59,224,160,.3)}
+.pill.warn{background:rgba(240,180,78,.12);color:var(--amber);border:1px solid rgba(240,180,78,.3)}
+.pill.risk{background:rgba(255,110,97,.12);color:var(--ember);border:1px solid rgba(255,110,97,.3)}
+.pace{height:7px;background:rgba(8,12,24,.7);border:1px solid var(--line);border-radius:5px;overflow:hidden;min-width:96px}
+.pace i{display:block;height:100%;border-radius:5px;box-shadow:0 0 8px currentColor;transition:width .7s ease}
 
 /* ── insights ── */
-.insight{border-left:3px solid var(--line);padding:12px 16px;background:var(--panel);border-radius:0 12px 12px 0;margin-bottom:11px}
-.insight.good{border-left-color:var(--jade)} .insight.warn{border-left-color:var(--amber)} .insight.risk{border-left-color:var(--ember)}
-.insight h4{font-size:13.5px;margin-bottom:4px}
-.insight p{color:var(--muted);font-size:12.5px;line-height:1.55}
+.insight{border:1px solid var(--line);border-left:3px solid var(--line2);padding:15px 19px;background:var(--glass);
+  border-radius:14px;margin-bottom:12px;backdrop-filter:blur(14px);transition:.18s;animation:rise .5s cubic-bezier(.2,.7,.2,1) both}
+.insight:nth-child(2){animation-delay:.05s}.insight:nth-child(3){animation-delay:.1s}
+.insight:nth-child(4){animation-delay:.15s}.insight:nth-child(5){animation-delay:.2s}.insight:nth-child(6){animation-delay:.25s}
+.insight:hover{transform:translateX(3px)}
+.insight.good{border-left-color:var(--jade);box-shadow:inset 4px 0 22px -12px var(--jade)}
+.insight.warn{border-left-color:var(--amber);box-shadow:inset 4px 0 22px -12px var(--amber)}
+.insight.risk{border-left-color:var(--ember);box-shadow:inset 4px 0 22px -12px var(--ember)}
+.insight h4{font-size:14px;margin-bottom:5px;letter-spacing:-.01em}
+.insight p{color:var(--muted);font-size:12.5px;line-height:1.6}
 
 /* ── forms ── */
-.formgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
-.field label{display:block;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.formgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px}
+.field label{display:block;font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin-bottom:7px;font-family:'JetBrains Mono',monospace}
 .field input,.field select,.field textarea{width:100%}
-.formfoot{margin-top:20px;display:flex;gap:10px;align-items:center}
-.hint{color:var(--faint);font-size:12px}
+.formfoot{margin-top:22px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.hint{color:var(--faint);font-size:12px;line-height:1.55}
 
 /* ── misc ── */
-.section{margin-top:22px}
-.empty{color:var(--faint);text-align:center;padding:30px;font-size:13px}
-#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);opacity:0;pointer-events:none;
-  background:var(--panel);border:1px solid var(--brass-dim);color:var(--text);padding:11px 20px;border-radius:10px;transition:.25s;z-index:50;font-size:13px}
+.section{margin-top:20px}
+.empty{color:var(--faint);text-align:center;padding:32px;font-size:13px}
+#toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(24px);opacity:0;pointer-events:none;
+  background:rgba(13,19,36,.92);backdrop-filter:blur(16px);border:1px solid rgba(237,184,77,.4);color:var(--text);
+  padding:12px 22px;border-radius:12px;transition:.3s cubic-bezier(.2,.7,.2,1);z-index:60;font-size:13px;
+  box-shadow:0 18px 50px rgba(0,0,0,.5), var(--glow-brass)}
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-#loader{position:fixed;inset:0;background:var(--ink);display:flex;align-items:center;justify-content:center;z-index:40;flex-direction:column;gap:14px;color:var(--muted)}
-.spin{width:34px;height:34px;border:3px solid var(--line);border-top-color:var(--brass);border-radius:50%;animation:sp 1s linear infinite}
+#loader{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:50;flex-direction:column;gap:18px;color:var(--muted)}
+#loader .lg{font-size:11px;letter-spacing:.3em;text-transform:uppercase;color:var(--brass);font-family:'JetBrains Mono',monospace}
+.spin{width:44px;height:44px;border-radius:50%;position:relative;
+  background:conic-gradient(from 0deg, transparent 10%, var(--brass), var(--cyan));
+  -webkit-mask:radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px));
+  mask:radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px));
+  animation:sp 1s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
 .view{display:none}.view.on{display:block}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 @media(max-width:900px){
   .shell{grid-template-columns:1fr}
-  .rail{position:static;height:auto;flex-direction:row;flex-wrap:wrap;align-items:center;padding:12px}
-  .brand{padding:0 10px;margin-right:auto}
+  .rail{position:static;height:auto;flex-direction:row;flex-wrap:wrap;align-items:center;padding:12px;gap:6px}
+  .brand{padding:0 8px;margin-right:auto}
+  .brand::after{display:none}
   .navlbl,.rail .foot{display:none}
+  .navbtn{width:auto;padding:8px 12px;font-size:12.5px}
+  .navbtn.active::before{display:none}
   .two,.health{grid-template-columns:1fr}
-  main{padding:18px 14px 60px}
+  main{padding:0 14px 60px}
+  .filters{margin:0 -14px 20px;padding:12px 14px}
+  .filters .title{width:100%;font-size:18px}
+  select{flex:1;min-width:0}
 }
 </style>
 </head>
 <body>
 
-<div id="loader"><div class="spin"></div><div id="loadmsg">Reading the books…</div></div>
+<div id="loader"><div class="spin"></div><div class="lg">Mangalam Realtech</div><div id="loadmsg">Syncing the ledger…</div></div>
 
 <div class="shell">
   <nav class="rail">
     <div class="brand">
       <div class="mark">Mangalam Realtech</div>
       <h1>Business Pulse</h1>
-      <div class="sub">Sales · Sources · Sites · Spend</div>
+      <div class="sub">SALES / SOURCES / SITES / SPEND</div>
     </div>
     <div class="navlbl">Analyse</div>
-    <button class="navbtn active" data-view="pulse"><span class="ic">◉</span>Pulse</button>
-    <button class="navbtn" data-view="forecast"><span class="ic">↗</span>Forecast</button>
-    <button class="navbtn" data-view="insights"><span class="ic">✦</span>Insights</button>
+    <button class="navbtn active" data-view="pulse" data-label="Pulse"><span class="ic">◉</span>Pulse</button>
+    <button class="navbtn" data-view="pnl" data-label="P&amp;L"><span class="ic">Σ</span>P&amp;L</button>
+    <button class="navbtn" data-view="team" data-label="Team"><span class="ic">⬡</span>Team</button>
+    <button class="navbtn" data-view="forecast" data-label="Forecast"><span class="ic">↗</span>Forecast</button>
+    <button class="navbtn" data-view="insights" data-label="Insights"><span class="ic">✦</span>Insights</button>
     <div class="navlbl">Enter</div>
-    <button class="navbtn" data-view="sale"><span class="ic">＋</span>New booking</button>
-    <button class="navbtn" data-view="expense"><span class="ic">₹</span>New expense</button>
-    <button class="navbtn" data-view="projects"><span class="ic">▤</span>Projects</button>
+    <button class="navbtn" data-view="sale" data-label="New booking"><span class="ic">＋</span>New booking</button>
+    <button class="navbtn" data-view="expense" data-label="New expense"><span class="ic">₹</span>New expense</button>
+    <button class="navbtn" data-view="projects" data-label="Projects"><span class="ic">▤</span>Projects</button>
     <div class="foot"><span class="dot" id="connDot"></span><span id="connTxt">Connected</span></div>
   </nav>
 
@@ -170,9 +262,20 @@ td.r,th.r{text-align:right}
         <div class="card health">
           <div>
             <div class="dialwrap">
-              <svg width="180" height="180" viewBox="0 0 180 180">
-                <circle cx="90" cy="90" r="78" fill="none" stroke="#233049" stroke-width="12"/>
-                <circle id="dialArc" cx="90" cy="90" r="78" fill="none" stroke="#D9A94C" stroke-width="12"
+              <svg width="184" height="184" viewBox="0 0 184 184">
+                <defs>
+                  <linearGradient id="gradGood" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#3BE0A0"/><stop offset="100%" stop-color="#56E1FF"/>
+                  </linearGradient>
+                  <linearGradient id="gradMid" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#EDB84D"/><stop offset="100%" stop-color="#F0B44E"/>
+                  </linearGradient>
+                  <linearGradient id="gradBad" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#FF6E61"/><stop offset="100%" stop-color="#F0B44E"/>
+                  </linearGradient>
+                </defs>
+                <circle cx="92" cy="92" r="78" fill="none" stroke="rgba(120,150,210,.12)" stroke-width="12"/>
+                <circle id="dialArc" cx="92" cy="92" r="78" fill="none" stroke="url(#gradMid)" stroke-width="12"
                         stroke-linecap="round" stroke-dasharray="490" stroke-dashoffset="490"/>
               </svg>
               <div class="dialscore"><div class="n num" id="healthN">–</div><div class="t">Health score</div></div>
@@ -196,12 +299,59 @@ td.r,th.r{text-align:right}
       <div class="card section">
         <h3>Site P&amp;L — with central cost allocated by revenue share</h3>
         <div style="overflow-x:auto"><table id="tblSite"></table></div>
-        <p class="hint" style="margin-top:10px">Fee income = agreement value × the project's commission rate (4.5% Aikyam, 5% others — override per project in the master). Central marketing &amp; CP-sourcing costs are spread across sites in proportion to each site's fee income, so contribution reflects what each site truly earns Realtech.</p>
+        <p class="hint" style="margin-top:10px">Fee income = agreement value × the project's commission rate (4.75% Aikyam, 5% others — override per project in the master). Central marketing &amp; CP-sourcing costs are spread across sites in proportion to each site's fee income, so contribution reflects what each site truly earns Realtech.</p>
       </div>
 
       <div class="card section">
         <h3>Overheads &amp; unattributed spend</h3>
         <div style="overflow-x:auto"><table id="tblOverhead"></table></div>
+      </div>
+    </section>
+
+    <!-- ═══ P&L ═══ -->
+    <section class="view" id="view-pnl">
+      <div class="grid kpis" id="pnlCards"></div>
+      <div class="grid two section">
+        <div class="card">
+          <h3>Profit &amp; loss — fee economics</h3>
+          <div style="overflow-x:auto"><table id="tblPnl"></table></div>
+        </div>
+        <div class="card">
+          <h3>Where every fee rupee goes</h3>
+          <div class="chartbox"><canvas id="chPnl"></canvas></div>
+        </div>
+      </div>
+      <p class="hint section">Company-wide view (project filter doesn't apply here). When the Team roster has active employees, payroll is computed automatically from the roster — don't also log salaries in Expenses or you'd count them twice. Incentives accrue automatically from bookings × each person's incentive rate.</p>
+    </section>
+
+    <!-- ═══ TEAM ═══ -->
+    <section class="view" id="view-team">
+      <div class="grid kpis" id="teamCards"></div>
+      <div class="card section">
+        <h3>Performance leaderboard — fee generated vs cost to company</h3>
+        <div style="overflow-x:auto"><table id="tblTeam"></table></div>
+      </div>
+      <div class="card section">
+        <h3>Fee generated vs cost per person</h3>
+        <div class="chartbox" style="height:300px"><canvas id="chTeam"></canvas></div>
+      </div>
+      <div class="card section">
+        <h3>Add team member</h3>
+        <div class="formgrid">
+          <div class="field"><label>Name</label><input id="tName" placeholder="Exactly as entered on bookings"></div>
+          <div class="field"><label>Role</label><select id="tRole">
+            <option>Sales Executive</option><option>Sales Head</option><option>CRM Executive</option>
+            <option>Marketing</option><option>CP Sourcing</option><option>Other</option>
+          </select></div>
+          <div class="field"><label>Site</label><select id="tSite"></select></div>
+          <div class="field"><label>Monthly salary (₹)</label><input type="number" id="tSalary" placeholder="45000"></div>
+          <div class="field"><label>Incentive % of sale value</label><input type="number" id="tIncentive" step="0.01" placeholder="0.10"></div>
+          <div class="field"><label>Monthly booking target</label><input type="number" id="tTarget" placeholder="3"></div>
+        </div>
+        <div class="formfoot">
+          <button class="btn" id="saveEmployee">Add member</button>
+          <span class="hint">Name must match the "Sales person" typed on bookings — that's how fee credit and incentives are matched.</span>
+        </div>
       </div>
     </section>
 
@@ -297,7 +447,7 @@ td.r,th.r{text-align:right}
    Leave empty to explore with generated demo data.
    ════════════════════════════════════════════════════════════ */
 const CONFIG = {
-  API_URL: 'https://script.google.com/macros/s/AKfycbxLY149NJD5Hh-G5AVNC9-kBMufrPExam_hsWyAeeLzIxzmORBTEs3WIe6rkrI7zqL6/exec'   // e.g. 'https://script.google.com/macros/s/AKfycb.../exec'
+  API_URL: 'https://script.google.com/macros/s/AKfycbxLY149NJD5Hh-G5AVNC9-kBMufrPExam_hsWyAeeLzIxzmORBTEs3WIe6rkrI7zqL6/exec'
 };
 
 /* ── state ── */
@@ -364,13 +514,13 @@ async function loadData() {
 }
 
 /* ── commission rate per project ──
-   Priority: 'Commission %' column in Projects → else 4.5% if the project
+   Priority: 'Commission %' column in Projects → else 4.75% if the project
    name contains "Aikyam" → else 5% (Realtech's standard rate). */
 function rateOf(projectName) {
   const p = (DB.projects || []).find(x => x['Project Name'] === projectName);
   const r = Number(p && p['Commission %']);
   if (r > 0) return r / 100;
-  return /aikyam/i.test(projectName || '') ? 0.045 : 0.05;
+  return /aikyam/i.test(projectName || '') ? 0.0475 : 0.05;
 }
 
 /* ── normalise rows ── */
@@ -397,6 +547,17 @@ function normExpenses() {
   })).filter(e => e.date && !isNaN(e.date));
 }
 
+function normTeam() {
+  return (DB.team || []).map(r => ({
+    id: r['Employee ID'], name: String(r['Name'] || '').trim(),
+    role: r['Role'] || '', site: r['Site'] || 'CENTRAL',
+    salary: Number(r['Monthly Salary']) || 0,
+    incPct: Number(r['Incentive % (of sale value)']) || 0,
+    target: Number(r['Monthly Booking Target']) || 0,
+    status: r['Status'] || 'Active'
+  })).filter(e => e.name);
+}
+
 /* ── filters ── */
 function initFilters() {
   const sales = normSales(), exps = normExpenses();
@@ -413,6 +574,7 @@ function initFilters() {
   $('sProject').innerHTML = projNames.map(p=>`<option>${esc(p)}</option>`).join('');
   $('sSource').innerHTML = (DB.sources||[]).map(s=>`<option>${esc(s)}</option>`).join('');
   $('eScope').innerHTML = '<option>CENTRAL</option>' + projNames.map(p=>`<option>${esc(p)}</option>`).join('');
+  $('tSite').innerHTML = '<option>CENTRAL</option>' + projNames.map(p=>`<option>${esc(p)}</option>`).join('');
   $('eCategory').innerHTML = (DB.expenseCategories||[]).map(c=>`<option>${esc(c.category)}</option>`).join('');
   $('sDate').valueAsDate = new Date(); $('eDate').valueAsDate = new Date();
 }
@@ -560,9 +722,64 @@ function analyse() {
     cancelRate: sales.length ? cancelled.length/sales.length : 0,
     bySource, pacing, elapsed });
 
+  /* ── PEOPLE & P&L (company-wide: FY + month filters apply, project filter doesn't) ── */
+  const monthsStarted = Math.min(12, Math.max(1, series.filter(m => new Date(m.y, m.m, 1) <= now).length));
+  const mip = F.month === 'all' ? monthsStarted : 1;   // salary months in period
+  const roster = normTeam().filter(e => e.status !== 'Exited');
+
+  const byPerson = {};
+  active.forEach(s => {
+    const k = (s.person || '').trim().toLowerCase(); if (!k) return;
+    const o = byPerson[k] = byPerson[k] || { display: s.person.trim(), bookings:0, gdv:0, fee:0 };
+    o.bookings++; o.gdv += s.value; o.fee += s.fee;
+  });
+
+  const team = roster.map(e => {
+    const st = byPerson[e.name.toLowerCase()] || { bookings:0, gdv:0, fee:0 };
+    const incentive = st.gdv * e.incPct / 100;
+    const cost = e.salary * mip + incentive;
+    return { ...e, bookings: st.bookings, gdv: st.gdv, fee: st.fee, incentive, cost,
+      roi: cost > 0 ? st.fee / cost : null,
+      targetAch: e.target > 0 ? st.bookings / (e.target * mip) : null, onRoster: true };
+  });
+  Object.entries(byPerson).forEach(([k, st]) => {
+    if (!roster.some(e => e.name.toLowerCase() === k))
+      team.push({ name: st.display, role: '—', site: '—', salary: 0, incPct: 0, target: 0,
+        bookings: st.bookings, gdv: st.gdv, fee: st.fee, incentive: 0, cost: 0,
+        roi: null, targetAch: null, onRoster: false });
+  });
+  team.sort((a,b) => b.fee - a.fee);
+
+  const payroll = roster.reduce((a,e) => a + e.salary * mip, 0);
+  const incentiveTotal = team.reduce((a,t) => a + t.incentive, 0);
+
+  const catAmt = {};
+  exps.forEach(e => catAmt[e.category] = (catAmt[e.category] || 0) + e.amount);
+  const cat = n => catAmt[n] || 0;
+  const feeAll = active.reduce((a,s) => a + s.fee, 0);
+  const gdvAll = active.reduce((a,s) => a + s.value, 0);
+  const bkAll = active.length;
+  const variableSelling = cat('Hoarding & Outdoor') + cat('Digital Marketing') + cat('CP Brokerage') + cat('Referral Payout');
+  const mktOverhead = cat('Events & Activations') + cat('Collaterals & Print');
+  const loggedSalaries = cat('Sales Team Salary') + cat('Marketing Team Salary') + cat('CP Team Salary');
+  const otherCost = cat('Other');
+  const rosterMode = roster.length > 0;
+  const payrollUsed = rosterMode ? payroll : loggedSalaries;
+  const peopleCost = payrollUsed + incentiveTotal;
+  const gross = feeAll - variableSelling;
+  const opProfit = gross - peopleCost - mktOverhead - otherCost;
+  const feePerBk = bkAll ? feeAll / bkAll : 0;
+  const varPerBk = bkAll ? variableSelling / bkAll : 0;
+  const fixedMonthly = (peopleCost + mktOverhead + otherCost) / mip;
+  const pnl = { feeAll, gdvAll, bkAll, variableSelling, gross, peopleCost, payroll: payrollUsed,
+    incentiveTotal, mktOverhead, otherCost, opProfit,
+    margin: feeAll > 0 ? opProfit / feeAll : null, rosterMode, mip,
+    breakEvenBk: feePerBk > varPerBk && fixedMonthly > 0 ? Math.ceil(fixedMonthly / (feePerBk - varPerBk)) : null,
+    feePerHead: roster.length ? feeAll / roster.length : null };
+
   return { sales:perSales, cancelled, revenue, fee, bookings, received, expense,
     bySource, overheads, sites, series, pacing, elapsed, fc, activeMonths,
-    fyToDateFee, fcFyTotal, health, centralTotal };
+    fyToDateFee, fcFyTotal, health, centralTotal, team, roster, pnl, mip };
 }
 
 function forecast(ys, n) {
@@ -682,6 +899,32 @@ function buildInsights(A) {
       body:`Current trajectory projects ~${fmt(A.fcFyTotal)} of fee income by March against ${fmt(tTot)} targeted (${gap>=0?'+':''}${fmt(gap)}). ${gap<0?'Closing it means either lifting monthly fee run-rate to '+fmt((tTot-A.fyToDateFee)/Math.max(1,12-A.activeMonths.length))+' or pulling a launch forward.':'Protect the pace — the risk now is complacency in H2.'}` });
   }
 
+  // people & P&L lens (only when a roster exists)
+  if (A.roster.length) {
+    const P = A.pnl, T = A.team;
+    if (P.opProfit < 0)
+      out.push({ level:'risk', title:'The business is operating below breakeven',
+        body:`Fee income of ${fmt(P.feeAll)} against total cost of ${fmt(P.variableSelling+P.peopleCost+P.mktOverhead+P.otherCost)} leaves ${fmt(P.opProfit)} for the period. At current cost structure you need roughly ${P.breakEvenBk??'–'} bookings a month just to break even — check the P&L page for which block is heaviest.` });
+    const top = T.find(t=>t.fee>0);
+    if (top) {
+      out.push({ level:'good', title:`${top.name} is your top performer`,
+        body:`${top.bookings} bookings, ${fmt(top.gdv)} in sales value, ${fmt(top.fee)} of fee generated${top.cost>0?` against ${fmt(top.cost)} cost — ${top.roi.toFixed(1)}× return`:''}. Recognise it publicly; top-performer visibility is the cheapest retention tool you have.` });
+      if (P.bkAll >= 8 && top.bookings/P.bkAll > 0.35)
+        out.push({ level:'warn', title:`Key-person risk: ${top.name} carries ${pct(top.bookings/P.bkAll)} of bookings`,
+          body:`If they resign, get poached, or go on leave, the month's number goes with them. Pair them with a shadow, split walk-in allocation more evenly, and document what they do differently — then train it.` });
+    }
+    if (P.feeAll > 0 && P.peopleCost/P.feeAll > 0.5)
+      out.push({ level: P.peopleCost/P.feeAll > 0.75 ? 'risk':'warn', title:'People cost is eating the fee',
+        body:`Payroll + incentives are ${pct(P.peopleCost/P.feeAll)} of fee income (healthy is under ~45% for a sales mandate business). Either the team is overstaffed for current velocity, or bookings per head (${(P.bkAll/(A.roster.length*P.mip)).toFixed(1)}/month) needs to rise before headcount does.` });
+    const underwater = T.filter(t=>t.onRoster && t.salary>0 && t.roi!=null && t.roi<1 && A.mip>=2);
+    if (underwater.length)
+      out.push({ level:'warn', title:`${underwater.length} team member${underwater.length>1?'s have':' has'} not covered their cost`,
+        body:`${underwater.slice(0,3).map(t=>t.name).join(', ')}${underwater.length>3?' and others':''} generated less fee than their salary + incentive over ${A.mip} months. Before it becomes a payroll decision, make it a pipeline decision: check their walk-in allocation, source quality, and site assignment.` });
+    if (P.feeAll>0 && P.incentiveTotal/P.feeAll > 0.2)
+      out.push({ level:'warn', title:'Incentive structure needs a look',
+        body:`Accrued incentives are ${pct(P.incentiveTotal/P.feeAll)} of fee income. Incentives should reward outperformance, not consume the mandate margin — consider slab-based payouts above target rather than flat % on every sale.` });
+  }
+
   if (!out.length) out.push({ level:'good', title:'Nothing on fire', body:'No rule tripped for this period. Add more data or widen the date range for richer signals.' });
   const rank = { risk:0, warn:1, good:2 };
   return out.sort((a,b)=>rank[a.level]-rank[b.level]);
@@ -692,63 +935,198 @@ function renderAll() {
   const A = analyse();
   renderKPIs(A); renderHealth(A); renderCharts(A);
   renderSourceTable(A); renderSiteTable(A); renderOverheads(A);
+  renderPnl(A); renderTeam(A);
   renderForecast(A); renderInsights(A); renderProjects();
+}
+
+function renderPnl(A) {
+  const P = A.pnl;
+  const cards = [
+    ['Operating profit', P.opProfit, fmt, P.opProfit>=0?'after all costs':'running at a loss', null, P.opProfit>=0?'#3BE0A0':'#FF6E61', P.opProfit>=0?'up':'down'],
+    ['Operating margin', P.margin, v=>v==null||!isFinite(v)?'–':pct(v), 'of fee income', null, '#56E1FF'],
+    ['People cost ratio', P.feeAll?P.peopleCost/P.feeAll:null, v=>v==null||!isFinite(v)?'–':pct(v), fmt(P.peopleCost)+' payroll + incentives', null, '#9B85FF'],
+    ['Incentive accrued', P.incentiveTotal, fmt, 'earned by team on bookings', null, '#EDB84D'],
+    ['Break-even bookings', P.breakEvenBk, v=>v==null?'–':Math.round(v)+' / month', 'to cover fixed costs', null, '#F0B44E'],
+    ['Fee per team member', P.feePerHead, v=>v==null||!isFinite(v)?'–':fmt(v), (A.roster.length||0)+' on roster', null, '#3BE0A0']
+  ];
+  $('pnlCards').innerHTML = cards.map(([l,,,d,,,cls]) =>
+    `<div class="card kpi"><div class="lbl">${l}</div><div class="val num">–</div><div class="delta ${cls||'flat'}">${d}</div></div>`).join('');
+  document.querySelectorAll('#pnlCards .val').forEach((el,i) => countUp(el, cards[i][1], cards[i][2]));
+
+  const li = (label, val, cls, indent) =>
+    `<tr><td style="${indent?'padding-left:26px;color:var(--muted);font-weight:400':''}">${label}</td>
+     <td class="r num" style="${cls?'color:var('+cls+')':''}">${fmt(val)}</td>
+     <td class="r num">${P.feeAll?pct(val/P.feeAll):'–'}</td></tr>`;
+  $('tblPnl').innerHTML = `<tr><th>Line</th><th class="r">Amount</th><th class="r">% of fee</th></tr>`
+    + li('Fee income  ·  '+P.bkAll+' bookings, '+fmt(P.gdvAll)+' GDV', P.feeAll)
+    + li('Variable selling cost (hoarding · digital · brokerage · referral)', -P.variableSelling, '--ember')
+    + li('Gross contribution', P.gross, P.gross>=0?'--jade':'--ember')
+    + li('People cost', -P.peopleCost, '--ember')
+    + li((P.rosterMode?'Payroll (auto from roster)':'Payroll (logged expenses)'), -P.payroll, null, true)
+    + li('Incentives accrued', -P.incentiveTotal, null, true)
+    + li('Marketing overhead (events · collaterals)', -P.mktOverhead, '--ember')
+    + li('Other', -P.otherCost, '--ember')
+    + li('Operating profit', P.opProfit, P.opProfit>=0?'--jade':'--ember');
+
+  killChart('pnl');
+  const segs = [
+    ['Variable selling', P.variableSelling, '#FF6E61'],
+    ['Payroll', P.payroll, '#9B85FF'],
+    ['Incentives', P.incentiveTotal, '#EDB84D'],
+    ['Overheads', P.mktOverhead + P.otherCost, '#F0B44E'],
+    ['Profit', Math.max(0, P.opProfit), '#3BE0A0']
+  ].filter(s => s[1] > 0);
+  charts.pnl = new Chart($('chPnl'), {
+    type:'doughnut',
+    data:{ labels: segs.map(s=>s[0]),
+      datasets:[{ data: segs.map(s=>s[1]), backgroundColor: segs.map(s=>s[2]),
+        borderColor:'#0B1120', borderWidth:3, hoverOffset:8 }]},
+    options:{ maintainAspectRatio:false, cutout:'68%',
+      plugins:{ legend:{position:'bottom', labels:{usePointStyle:true, pointStyle:'circle', boxWidth:7, padding:14}},
+        tooltip:{ backgroundColor:'rgba(11,17,32,.95)', borderColor:'rgba(237,184,77,.35)', borderWidth:1, padding:12,
+          callbacks:{label:c=>' '+c.label+': '+fmt(c.raw)+(P.feeAll?' ('+pct(c.raw/P.feeAll)+' of fee)':'')} } } }
+  });
+}
+
+function renderTeam(A) {
+  const T = A.team, P = A.pnl;
+  const top = T.find(t => t.fee > 0);
+  const cards = [
+    ['Top performer', null, ()=> top ? esc(top.name) : '–', top? fmt(top.fee)+' fee · '+top.bookings+' bookings' : 'no bookings in period', null, '#EDB84D'],
+    ['Payroll % of fee', P.feeAll?P.payroll/P.feeAll:null, v=>v==null||!isFinite(v)?'–':pct(v), fmt(P.payroll)+' over '+P.mip+' month'+(P.mip>1?'s':''), null, '#9B85FF'],
+    ['Incentive accrued', P.incentiveTotal, fmt, 'auto: sale value × incentive rate', null, '#3BE0A0'],
+    ['Bookings per head / month', A.roster.length? P.bkAll/(A.roster.length*P.mip) : null, v=>v==null||!isFinite(v)?'–':v.toFixed(1), 'sales productivity', null, '#56E1FF']
+  ];
+  $('teamCards').innerHTML = cards.map(([l,,,d]) =>
+    `<div class="card kpi"><div class="lbl">${l}</div><div class="val num">–</div><div class="delta flat">${d}</div></div>`).join('');
+  document.querySelectorAll('#teamCards .val').forEach((el,i) => {
+    if (cards[i][1] == null && i === 0) el.textContent = cards[i][2]();
+    else countUp(el, cards[i][1], cards[i][2]);
+  });
+
+  $('tblTeam').innerHTML = `<tr><th>Name</th><th>Role</th><th>Site</th><th class="r">Bookings</th><th class="r">Sales value</th><th class="r">Fee generated</th><th class="r">Salary (period)</th><th class="r">Incentive</th><th class="r">Fee ÷ Cost</th><th class="r">Target</th></tr>` +
+    (T.length ? T.map(t => {
+      const roiPill = t.roi==null ? (t.onRoster?'–':'<span class="pill warn">not on roster</span>')
+        : `<span class="pill ${t.roi>=3?'good':t.roi>=1.5?'warn':'risk'}">${t.roi.toFixed(1)}×</span>`;
+      const tgt = t.targetAch==null ? '–' : `<span class="pill ${t.targetAch>=1?'good':t.targetAch>=0.7?'warn':'risk'}">${pct(t.targetAch)}</span>`;
+      return `<tr><td>${esc(t.name)}</td><td>${esc(t.role)}</td><td>${esc(t.site)}</td>
+        <td class="r num">${t.bookings}</td><td class="r num">${fmt(t.gdv)}</td><td class="r num">${fmt(t.fee)}</td>
+        <td class="r num">${t.onRoster?fmt(t.salary*A.mip):'–'}</td><td class="r num">${fmt(t.incentive)}</td>
+        <td class="r">${roiPill}</td><td class="r">${tgt}</td></tr>`;
+    }).join('') : '<tr><td colspan="10" class="empty">Add team members below — bookings match by sales person name</td></tr>');
+
+  killChart('team');
+  const top10 = T.filter(t=>t.fee>0 || t.cost>0).slice(0,10);
+  charts.team = new Chart($('chTeam'), {
+    type:'bar',
+    data:{ labels: top10.map(t=>t.name),
+      datasets:[
+        { label:'Fee generated', data: top10.map(t=>t.fee), backgroundColor:'rgba(59,224,160,.65)', borderColor:'#3BE0A0', borderWidth:1, borderRadius:5 },
+        { label:'Cost to company', data: top10.map(t=>t.cost), backgroundColor:'rgba(255,110,97,.55)', borderColor:'#FF6E61', borderWidth:1, borderRadius:5 }
+      ]},
+    options:{ indexAxis:'y', maintainAspectRatio:false,
+      plugins:{ legend:{position:'bottom', labels:{usePointStyle:true, pointStyle:'rectRounded', boxWidth:8, padding:16}},
+        tooltip:{ backgroundColor:'rgba(11,17,32,.95)', borderColor:'rgba(237,184,77,.35)', borderWidth:1, padding:12,
+          callbacks:{label:c=>' '+c.dataset.label+': '+fmt(c.raw)} } },
+      scales:{ x:{ ticks:{ callback:v=>fmt(v), font:{family:"'JetBrains Mono', monospace", size:10} } }, y:{ grid:{display:false} } } }
+  });
+}
+
+let sparkSeq = 0;
+function spark(data, color) {
+  if (!data || data.length < 2 || !data.some(v => v > 0)) return '';
+  const w = 100, h = 34, id = 'sg' + (++sparkSeq);
+  const max = Math.max(...data), min = Math.min(...data, 0), rng = (max - min) || 1;
+  const pts = data.map((v, i) => `${(i / (data.length - 1)) * w},${(h - 4 - ((v - min) / rng) * (h - 10)).toFixed(1)}`);
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+    <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${color}" stop-opacity=".30"/>
+      <stop offset="100%" stop-color="${color}" stop-opacity="0"/></linearGradient></defs>
+    <polygon points="0,${h} ${pts.join(' ')} ${w},${h}" fill="url(#${id})"/>
+    <polyline points="${pts.join(' ')}" fill="none" stroke="${color}" stroke-width="1.6"
+      stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/></svg>`;
+}
+function countUp(el, target, formatter) {
+  if (target == null || !isFinite(target)) { el.textContent = formatter(target); return; }
+  if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) { el.textContent = formatter(target); return; }
+  const dur = 750, t0 = performance.now();
+  (function tick(t) {
+    const p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+    el.textContent = formatter(target * e);
+    if (p < 1) requestAnimationFrame(tick);
+  })(t0);
 }
 
 function renderKPIs(A) {
   const cpb = A.bookings ? A.expense/A.bookings : null;
   const net = A.fee - A.expense;
+  const S = A.series;
   const cards = [
-    ['Sales value (GDV)', fmt(A.revenue), A.bookings + ' bookings'],
-    ['Fee income', fmt(A.fee), 'auto @ 4.5% Aikyam · 5% others'],
-    ['Total S&M spend', fmt(A.expense), pct(A.fee?A.expense/A.fee:NaN) + ' of fee income'],
-    ['Net contribution', fmt(net), net>=0?'fee income covers spend':'spend exceeds fee income', net>=0?'up':'down'],
-    ['Cost per booking', cpb!=null?fmt(cpb):'–', 'blended, all sources'],
-    ['Avg ticket size', A.bookings?fmt(A.revenue/A.bookings):'–', 'agreement value']
+    ['Sales value / GDV', A.revenue, fmt, A.bookings + ' bookings', S.map(m=>m.revenue), '#EDB84D'],
+    ['Fee income', A.fee, fmt, 'auto @ 4.75% Aikyam · 5% others', S.map(m=>m.fee), '#3BE0A0'],
+    ['S&M spend', A.expense, fmt, pct(A.fee?A.expense/A.fee:NaN) + ' of fee income', S.map(m=>m.expense), '#FF6E61'],
+    ['Net contribution', net, fmt, net>=0?'fee income covers spend':'spend exceeds fee income', S.map(m=>m.fee-m.expense), '#56E1FF', net>=0?'up':'down'],
+    ['Cost per booking', cpb, v=>v==null||!isFinite(v)?'–':fmt(v), 'blended, all sources', S.map(m=>m.bookings?m.expense/m.bookings:0), '#9B85FF'],
+    ['Avg ticket size', A.bookings?A.revenue/A.bookings:null, v=>v==null||!isFinite(v)?'–':fmt(v), 'agreement value', S.map(m=>m.bookings?m.revenue/m.bookings:0), '#EDB84D']
   ];
-  $('kpiRow').innerHTML = cards.map(([l,v,d,cls]) =>
-    `<div class="card kpi"><div class="lbl">${l}</div><div class="val num">${v}</div><div class="delta ${cls||'flat'}">${d}</div></div>`).join('');
+  $('kpiRow').innerHTML = cards.map(([l,,,d,sd,color,cls]) =>
+    `<div class="card kpi" style="padding-bottom:40px"><div class="lbl">${l}</div><div class="val num">–</div>
+     <div class="delta ${cls||'flat'}">${d}</div>${spark(sd,color)}</div>`).join('');
+  document.querySelectorAll('#kpiRow .val').forEach((el,i) => countUp(el, cards[i][1], cards[i][2]));
 }
 
 function renderHealth(A) {
   const h = A.health;
   $('healthN').textContent = h.score;
   const arc = $('dialArc');
-  const col = h.score>=70?'#43BD8B':h.score>=45?'#D9A94C':'#E06552';
-  arc.style.stroke = col;
-  arc.style.transition = 'stroke-dashoffset .8s ease';
+  const col = h.score>=70?'#3BE0A0':h.score>=45?'#EDB84D':'#FF6E61';
+  arc.style.stroke = h.score>=70?'url(#gradGood)':h.score>=45?'url(#gradMid)':'url(#gradBad)';
+  arc.style.color = col; // drives the drop-shadow glow
+  arc.style.transition = 'stroke-dashoffset .9s cubic-bezier(.2,.7,.2,1)';
   requestAnimationFrame(()=>arc.style.strokeDashoffset = 490 - 490*(h.score/100)*0.999);
   $('healthN').style.color = col;
   $('healthFactors').innerHTML = h.factors.map(f => {
-    const c = f.s>=70?'#43BD8B':f.s>=45?'#D9A94C':'#E06552';
+    const c = f.s>=70?'#3BE0A0':f.s>=45?'#EDB84D':'#FF6E61';
     return `<div class="factor"><span title="${esc(f.note)}">${f.name}</span>
-      <span class="bar"><i style="width:${f.s}%;background:${c}"></i></span>
+      <span class="bar"><i style="width:${f.s}%;background:${c};color:${c}"></i></span>
       <span class="sc num">${Math.round(f.s)}</span></div>`;
   }).join('');
 }
 
 const chartDefaults = {
-  color:'#8A96AD',
-  font:{ family:'Archivo' }
+  color:'#94A0BA',
+  font:{ family:"'Space Grotesk', sans-serif" }
 };
 function killChart(id){ if(charts[id]){charts[id].destroy(); delete charts[id];} }
 
 function renderCharts(A) {
-  Chart.defaults.color = '#8A96AD'; Chart.defaults.font.family = 'Archivo';
-  Chart.defaults.borderColor = 'rgba(35,48,73,.6)';
+  Chart.defaults.color = '#94A0BA';
+  Chart.defaults.font.family = "'Space Grotesk', sans-serif";
+  Chart.defaults.font.size = 11.5;
+  Chart.defaults.borderColor = 'rgba(120,150,210,.10)';
   const labels = A.series.map(m=>m.label);
 
   killChart('rev');
+  const rctx = $('chRevExp').getContext('2d');
+  const gBrass = rctx.createLinearGradient(0,0,0,280);
+  gBrass.addColorStop(0,'rgba(237,184,77,.55)'); gBrass.addColorStop(1,'rgba(237,184,77,.04)');
   charts.rev = new Chart($('chRevExp'), {
     data: { labels, datasets: [
-      { type:'bar', label:'Sales value (GDV)', data:A.series.map(m=>m.revenue), backgroundColor:'rgba(217,169,76,.35)', borderRadius:4, yAxisID:'y' },
-      { type:'line', label:'Fee income', data:A.series.map(m=>m.fee), borderColor:'#43BD8B', backgroundColor:'#43BD8B', tension:.3, pointRadius:3, yAxisID:'y1' },
-      { type:'line', label:'Spend', data:A.series.map(m=>m.expense), borderColor:'#E06552', backgroundColor:'#E06552', tension:.3, pointRadius:3, yAxisID:'y1' }
+      { type:'bar', label:'Sales value (GDV)', data:A.series.map(m=>m.revenue), backgroundColor:gBrass,
+        borderColor:'rgba(237,184,77,.8)', borderWidth:{top:1.5,left:0,right:0,bottom:0}, borderRadius:6, yAxisID:'y' },
+      { type:'line', label:'Fee income', data:A.series.map(m=>m.fee), borderColor:'#3BE0A0', backgroundColor:'#3BE0A0',
+        tension:.35, pointRadius:2.5, pointHoverRadius:5, borderWidth:2, yAxisID:'y1' },
+      { type:'line', label:'Spend', data:A.series.map(m=>m.expense), borderColor:'#FF6E61', backgroundColor:'#FF6E61',
+        tension:.35, pointRadius:2.5, pointHoverRadius:5, borderWidth:2, yAxisID:'y1' }
     ]},
-    options: { maintainAspectRatio:false, plugins:{ legend:{position:'bottom'} , tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmt(c.raw)}}},
+    options: { maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
+      plugins:{ legend:{position:'bottom', labels:{usePointStyle:true, pointStyle:'rectRounded', boxWidth:8, padding:16}},
+        tooltip:{ backgroundColor:'rgba(11,17,32,.95)', borderColor:'rgba(237,184,77,.35)', borderWidth:1, padding:12,
+          titleFont:{family:"'JetBrains Mono', monospace"}, callbacks:{label:c=>' '+c.dataset.label+': '+fmt(c.raw)}}},
       scales:{
-        y:{ position:'left', ticks:{ callback:v=>fmt(v) }, title:{display:true,text:'GDV'} },
-        y1:{ position:'right', grid:{drawOnChartArea:false}, ticks:{ callback:v=>fmt(v) }, title:{display:true,text:'Fee / Spend'} }
+        x:{ grid:{display:false} },
+        y:{ position:'left', ticks:{ callback:v=>fmt(v), font:{family:"'JetBrains Mono', monospace", size:10} }, title:{display:true,text:'GDV'} },
+        y1:{ position:'right', grid:{drawOnChartArea:false}, ticks:{ callback:v=>fmt(v), font:{family:"'JetBrains Mono', monospace", size:10} }, title:{display:true,text:'Fee / Spend'} }
       } }
   });
 
@@ -758,8 +1136,11 @@ function renderCharts(A) {
     type:'doughnut',
     data:{ labels: entries.map(([n])=>n),
       datasets:[{ data: entries.map(([,v])=>v.bookings),
-        backgroundColor:['#D9A94C','#43BD8B','#5B8DEF','#E3A13B','#B07CC6','#E06552'], borderColor:'#131B2C', borderWidth:3 }]},
-    options:{ maintainAspectRatio:false, cutout:'62%', plugins:{ legend:{position:'bottom'} } }
+        backgroundColor:['#EDB84D','#3BE0A0','#56E1FF','#9B85FF','#F0B44E','#FF6E61'],
+        borderColor:'#0B1120', borderWidth:3, hoverOffset:8 }]},
+    options:{ maintainAspectRatio:false, cutout:'68%',
+      plugins:{ legend:{position:'bottom', labels:{usePointStyle:true, pointStyle:'circle', boxWidth:7, padding:14}},
+        tooltip:{ backgroundColor:'rgba(11,17,32,.95)', borderColor:'rgba(237,184,77,.35)', borderWidth:1, padding:12 } } }
   });
 }
 
@@ -818,17 +1199,24 @@ function renderForecast(A) {
   });
 
   killChart('fc');
+  const fctx = $('chForecast').getContext('2d');
+  const gFc = fctx.createLinearGradient(0,0,0,320);
+  gFc.addColorStop(0,'rgba(237,184,77,.55)'); gFc.addColorStop(1,'rgba(237,184,77,.04)');
   charts.fc = new Chart($('chForecast'), {
     data:{ labels, datasets:[
-      { type:'bar', label:'Actual fee income', data:[...actual, ...Array(labels.length-actual.length).fill(null)], backgroundColor:'rgba(217,169,76,.75)', borderRadius:4 },
-      { type:'line', label:'Projection', data:fcLine, borderColor:'#43BD8B', borderDash:[6,5], tension:.25, pointRadius:3, backgroundColor:'#43BD8B' },
-      { type:'line', label:'Band (high)', data:bandHi, borderColor:'rgba(67,189,139,.0)', backgroundColor:'rgba(67,189,139,.10)', fill:'+1', pointRadius:0 },
-      { type:'line', label:'Band (low)', data:bandLo, borderColor:'rgba(67,189,139,.0)', pointRadius:0 }
+      { type:'bar', label:'Actual fee income', data:[...actual, ...Array(labels.length-actual.length).fill(null)],
+        backgroundColor:gFc, borderColor:'rgba(237,184,77,.8)', borderWidth:{top:1.5,left:0,right:0,bottom:0}, borderRadius:6 },
+      { type:'line', label:'Projection', data:fcLine, borderColor:'#3BE0A0', borderDash:[7,6], tension:.25,
+        pointRadius:3.5, pointHoverRadius:6, borderWidth:2, backgroundColor:'#3BE0A0' },
+      { type:'line', label:'Band (high)', data:bandHi, borderColor:'rgba(59,224,160,0)', backgroundColor:'rgba(59,224,160,.09)', fill:'+1', pointRadius:0 },
+      { type:'line', label:'Band (low)', data:bandLo, borderColor:'rgba(59,224,160,0)', pointRadius:0 }
     ]},
-    options:{ maintainAspectRatio:false,
-      plugins:{ legend:{position:'bottom', labels:{filter:i=>!i.text.startsWith('Band')}},
-        tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmt(c.raw)}} },
-      scales:{ y:{ ticks:{ callback:v=>fmt(v) } } } }
+    options:{ maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
+      plugins:{ legend:{position:'bottom', labels:{usePointStyle:true, pointStyle:'rectRounded', boxWidth:8, padding:16, filter:i=>!i.text.startsWith('Band')}},
+        tooltip:{ backgroundColor:'rgba(11,17,32,.95)', borderColor:'rgba(237,184,77,.35)', borderWidth:1, padding:12,
+          titleFont:{family:"'JetBrains Mono', monospace"}, callbacks:{label:c=>' '+c.dataset.label+': '+fmt(c.raw)} } },
+      scales:{ x:{ grid:{display:false} },
+        y:{ ticks:{ callback:v=>fmt(v), font:{family:"'JetBrains Mono', monospace", size:10} } } } }
   });
 
   $('tblPacing').innerHTML = `<tr><th>Project</th><th class="r">FY sales value</th><th class="r">Fee earned</th><th class="r">GDV target</th><th class="r">Achieved</th><th>Pace vs time</th><th class="r">Verdict</th></tr>` +
@@ -838,7 +1226,7 @@ function renderForecast(A) {
       const verdict = p.pace==null?'no target': p.pace>=0.95?'on track': p.pace>=0.7?'watch':'behind';
       return `<tr><td>${esc(p.name)}</td><td class="r num">${fmt(p.rev)}</td><td class="r num">${fmt(p.fee)}</td><td class="r num">${p.tR?fmt(p.tR):'–'}</td>
         <td class="r num">${p.achievedPct!=null?pct(p.achievedPct):'–'}</td>
-        <td><div class="pace"><i style="width:${w}%;background:${col}"></i></div></td>
+        <td><div class="pace"><i style="width:${w}%;background:${col};color:${col}"></i></div></td>
         <td class="r"><span class="pill ${p.pace==null?'warn':p.pace>=0.95?'good':p.pace>=0.7?'warn':'risk'}">${verdict}</span></td></tr>`;
     }).join('');
 }
@@ -891,10 +1279,18 @@ $('saveExpense').onclick = function() {
 $('saveProject').onclick = function() {
   const p = { action:'addProject', name:$('pName').value, location:$('pLoc').value,
     totalUnits:$('pUnits').value, targetRevenueCr:$('pTargetRev').value, targetBookings:$('pTargetBk').value,
-    commissionPct: $('pCommission').value || (/aikyam/i.test($('pName').value) ? 4.5 : 5) };
+    commissionPct: $('pCommission').value || (/aikyam/i.test($('pName').value) ? 4.75 : 5) };
   if (!p.name) return toast('Project name is required');
   submit(this, p, () => DB.projects.push({ 'Project ID':'PRJ-DEMO','Project Name':p.name,'Location':p.location,'Total Units':p.totalUnits,
     'Status':'Active','FY Target Revenue (Cr)':p.targetRevenueCr,'FY Target Bookings':p.targetBookings,'Commission %':p.commissionPct }));
+};
+
+$('saveEmployee').onclick = function() {
+  const p = { action:'addEmployee', name:$('tName').value.trim(), role:$('tRole').value, site:$('tSite').value,
+    salary:$('tSalary').value, incentivePct:$('tIncentive').value, bookingTarget:$('tTarget').value };
+  if (!p.name) return toast('Name is required');
+  submit(this, p, () => (DB.team = DB.team || []).push({ 'Employee ID':'EMP-DEMO','Name':p.name,'Role':p.role,'Site':p.site,
+    'Monthly Salary':p.salary,'Incentive % (of sale value)':p.incentivePct,'Monthly Booking Target':p.bookingTarget,'Status':'Active' }));
 };
 
 /* ════════════════ NAV & FILTERS ════════════════ */
@@ -903,7 +1299,7 @@ document.querySelectorAll('.navbtn').forEach(b => b.onclick = () => {
   document.querySelectorAll('.view').forEach(x=>x.classList.remove('on'));
   b.classList.add('active');
   $('view-'+b.dataset.view).classList.add('on');
-  $('viewTitle').textContent = b.textContent.trim();
+  $('viewTitle').textContent = b.dataset.label || b.textContent.trim();
 });
 $('fFY').onchange = e => { F.fy = Number(e.target.value); renderAll(); };
 $('fMonth').onchange = e => { F.month = e.target.value; renderAll(); };
@@ -916,7 +1312,7 @@ function demoData() {
     { 'Project ID':'PRJ-001','Project Name':'Mangalam Midas City','Location':'PCMC','Total Units':400,'Status':'Active','FY Target Revenue (Cr)':120,'FY Target Bookings':180,'Commission %':5 },
     { 'Project ID':'PRJ-002','Project Name':'Mangalam Myra','Location':'Pune','Total Units':220,'Status':'Active','FY Target Revenue (Cr)':80,'FY Target Bookings':110,'Commission %':5 },
     { 'Project ID':'PRJ-003','Project Name':'Mangalam Momento','Location':'Pune','Total Units':160,'Status':'Active','FY Target Revenue (Cr)':55,'FY Target Bookings':70,'Commission %':5 },
-    { 'Project ID':'PRJ-004','Project Name':'Mangalam Aikyam','Location':'Pune','Total Units':180,'Status':'Active','FY Target Revenue (Cr)':60,'FY Target Bookings':75,'Commission %':4.5 }
+    { 'Project ID':'PRJ-004','Project Name':'Mangalam Aikyam','Location':'Pune','Total Units':180,'Status':'Active','FY Target Revenue (Cr)':60,'FY Target Bookings':75,'Commission %':4.75 }
   ];
   const sources = ['Hoarding','Digital Marketing','Channel Partner','Referral','Direct Walk-in'];
   const expenseCategories = [
@@ -927,6 +1323,16 @@ function demoData() {
     { category:'Collaterals & Print', source:'Marketing Overhead' },{ category:'Other', source:'Other' }
   ];
   let seed = 42; const rnd = () => (seed = (seed*16807)%2147483647) / 2147483647;
+  const team = [
+    { 'Employee ID':'EMP-0001','Name':'Rohit','Role':'Sales Head','Site':'Mangalam Midas City','Monthly Salary':65000,'Incentive % (of sale value)':0.10,'Monthly Booking Target':4,'Status':'Active' },
+    { 'Employee ID':'EMP-0002','Name':'Sneha','Role':'Sales Executive','Site':'Mangalam Myra','Monthly Salary':42000,'Incentive % (of sale value)':0.10,'Monthly Booking Target':3,'Status':'Active' },
+    { 'Employee ID':'EMP-0003','Name':'Amit','Role':'Sales Executive','Site':'Mangalam Momento','Monthly Salary':40000,'Incentive % (of sale value)':0.10,'Monthly Booking Target':3,'Status':'Active' },
+    { 'Employee ID':'EMP-0004','Name':'Pooja','Role':'Sales Executive','Site':'Mangalam Aikyam','Monthly Salary':40000,'Incentive % (of sale value)':0.10,'Monthly Booking Target':3,'Status':'Active' },
+    { 'Employee ID':'EMP-0005','Name':'Vikram','Role':'Sales Executive','Site':'Mangalam Midas City','Monthly Salary':38000,'Incentive % (of sale value)':0.10,'Monthly Booking Target':3,'Status':'Active' },
+    { 'Employee ID':'EMP-0006','Name':'Kiran','Role':'Sales Executive','Site':'Mangalam Myra','Monthly Salary':38000,'Incentive % (of sale value)':0.10,'Monthly Booking Target':2,'Status':'Active' },
+    { 'Employee ID':'EMP-0007','Name':'Neha','Role':'Marketing','Site':'CENTRAL','Monthly Salary':55000,'Incentive % (of sale value)':0,'Monthly Booking Target':0,'Status':'Active' },
+    { 'Employee ID':'EMP-0008','Name':'Sagar','Role':'CP Sourcing','Site':'CENTRAL','Monthly Salary':45000,'Incentive % (of sale value)':0,'Monthly Booking Target':0,'Status':'Active' }
+  ];
   const sales = [], expenses = [];
   const srcMix = [['Channel Partner',.42],['Digital Marketing',.24],['Hoarding',.12],['Referral',.13],['Direct Walk-in',.09]];
   const people = ['Rohit','Sneha','Amit','Pooja','Vikram','Kiran'];
@@ -966,7 +1372,7 @@ function demoData() {
       if (rnd()<.4) addE(p['Project Name'],'Collaterals & Print', (0.2+rnd()*0.4)*1e5, 'Brochures, standees');
     });
   }
-  return { projects, sales, expenses, sources, expenseCategories, generatedAt: new Date().toISOString() };
+  return { projects, sales, expenses, team, sources, expenseCategories, generatedAt: new Date().toISOString() };
 }
 
 loadData();
