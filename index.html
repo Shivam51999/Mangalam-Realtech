@@ -9,12 +9,12 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
 :root{
-  --bg:#050810; --glass:rgba(17,24,42,.55); --glass2:rgba(11,17,32,.65);
-  --line:rgba(120,150,210,.14); --line2:rgba(120,150,210,.28);
-  --brass:#EDB84D; --brass2:#DE9134; --cyan:#56E1FF; --jade:#3BE0A0; --ember:#FF6E61; --amber:#F0B44E; --violet:#9B85FF;
-  --text:#F0F4FC; --muted:#94A0BA; --faint:#5D6980;
-  --radius:18px;
-  --glow-brass:0 0 24px rgba(237,184,77,.25);
+  --bg:#04060C; --glass:rgba(18,25,44,.52); --glass2:rgba(10,15,30,.66);
+  --line:rgba(125,155,215,.13); --line2:rgba(125,155,215,.3);
+  --brass:#F0BC52; --brass2:#E0913A; --cyan:#5BE3FF; --jade:#3CE4A4; --ember:#FF6F62; --amber:#F2B650; --violet:#A18BFF;
+  --text:#F2F5FC; --muted:#95A1BC; --faint:#5E6A82;
+  --radius:20px;
+  --glow-brass:0 0 26px rgba(240,188,82,.28);
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth}
@@ -22,108 +22,122 @@ html,body{min-height:100%}
 body{
   background:var(--bg); color:var(--text);
   font-family:'Space Grotesk',system-ui,sans-serif; font-size:14px;
-  background-image:
-    radial-gradient(900px 480px at 85% -8%, rgba(237,184,77,.10), transparent 60%),
-    radial-gradient(760px 480px at -10% 18%, rgba(86,225,255,.07), transparent 60%),
-    radial-gradient(700px 600px at 55% 110%, rgba(155,133,255,.06), transparent 60%);
-  background-attachment:fixed;
+  overflow-x:hidden;
 }
-body::before{
-  content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
-  background-image:radial-gradient(rgba(140,165,220,.10) 1px, transparent 1px);
-  background-size:26px 26px;
-  mask-image:linear-gradient(180deg, rgba(0,0,0,.5), rgba(0,0,0,.12) 40%, transparent 75%);
-}
+/* aurora field */
+body::before, body::after{content:'';position:fixed;z-index:0;pointer-events:none;border-radius:50%;filter:blur(90px);opacity:.5}
+body::before{width:820px;height:560px;top:-260px;right:-160px;
+  background:radial-gradient(closest-side, rgba(240,188,82,.28), rgba(91,227,255,.10), transparent 70%);
+  animation:drift1 26s ease-in-out infinite alternate}
+body::after{width:700px;height:620px;bottom:-300px;left:-200px;
+  background:radial-gradient(closest-side, rgba(161,139,255,.20), rgba(60,228,164,.08), transparent 70%);
+  animation:drift2 32s ease-in-out infinite alternate}
+@keyframes drift1{to{transform:translate(-90px,70px) scale(1.12)}}
+@keyframes drift2{to{transform:translate(110px,-60px) scale(1.08)}}
+.gridbg{position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:linear-gradient(rgba(125,155,215,.05) 1px, transparent 1px),linear-gradient(90deg, rgba(125,155,215,.05) 1px, transparent 1px);
+  background-size:44px 44px;
+  mask-image:radial-gradient(ellipse 90% 60% at 50% 0%, rgba(0,0,0,.7), transparent 75%)}
 .num{font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums}
 a{color:var(--brass)}
-::selection{background:rgba(237,184,77,.3)}
+::selection{background:rgba(240,188,82,.3)}
 ::-webkit-scrollbar{width:10px;height:10px}
-::-webkit-scrollbar-thumb{background:rgba(120,150,210,.18);border-radius:6px;border:2px solid var(--bg)}
+::-webkit-scrollbar-thumb{background:rgba(125,155,215,.18);border-radius:6px;border:2px solid var(--bg)}
 ::-webkit-scrollbar-track{background:transparent}
 
-/* ── shell ── */
-.shell{display:grid;grid-template-columns:224px 1fr;min-height:100vh;position:relative;z-index:1}
+/* ═══ command header (v3: horizontal) ═══ */
+.shell{position:relative;z-index:1;max-width:1320px;margin:0 auto}
 .rail{
-  padding:24px 14px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;gap:4px;
-  background:linear-gradient(180deg, rgba(13,19,36,.85), rgba(8,12,24,.85));
-  backdrop-filter:blur(20px); border-right:1px solid var(--line);
+  position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+  padding:14px 28px;margin:0 0 6px;
+  background:linear-gradient(180deg, rgba(7,11,22,.9), rgba(7,11,22,.72));
+  backdrop-filter:blur(22px);border-bottom:1px solid var(--line);
 }
-.brand{padding:2px 10px 20px;position:relative}
-.brand .mark{font-weight:600;letter-spacing:.22em;font-size:10px;color:var(--brass);text-transform:uppercase}
-.brand h1{font-size:20px;font-weight:700;letter-spacing:-.02em;margin-top:4px;
-  background:linear-gradient(92deg,#FFF 20%, #C9D4EC 60%, #8fa2c9);-webkit-background-clip:text;background-clip:text;color:transparent}
-.brand .sub{color:var(--faint);font-size:10.5px;margin-top:4px;letter-spacing:.08em;font-family:'JetBrains Mono',monospace}
-.brand::after{content:'';position:absolute;left:10px;right:10px;bottom:6px;height:1px;
-  background:linear-gradient(90deg, rgba(237,184,77,.5), rgba(86,225,255,.25), transparent)}
-.navlbl{font-size:9.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--faint);padding:16px 12px 7px;font-family:'JetBrains Mono',monospace}
-.navbtn{display:flex;align-items:center;gap:11px;width:100%;text-align:left;background:none;border:1px solid transparent;color:var(--muted);
-  padding:10px 12px;border-radius:12px;font:inherit;font-weight:500;font-size:13.5px;cursor:pointer;transition:.18s;position:relative}
-.navbtn:hover{color:var(--text);background:rgba(255,255,255,.045)}
-.navbtn.active{color:#FFE9BC;background:linear-gradient(95deg, rgba(237,184,77,.16), rgba(237,184,77,.05));
-  border-color:rgba(237,184,77,.28); box-shadow:inset 0 0 18px rgba(237,184,77,.06)}
-.navbtn.active::before{content:'';position:absolute;left:-14px;top:22%;bottom:22%;width:3px;border-radius:3px;
-  background:linear-gradient(180deg,var(--brass),var(--brass2));box-shadow:var(--glow-brass)}
-.navbtn .ic{width:18px;text-align:center;opacity:.95;font-size:13px}
-.rail .foot{margin-top:auto;padding:12px;font-size:10.5px;color:var(--faint);font-family:'JetBrains Mono',monospace;
-  border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.02)}
+.rail::after{content:'';position:absolute;left:0;bottom:-1px;height:1px;width:30%;
+  background:linear-gradient(90deg, transparent, var(--cyan), var(--brass), transparent);
+  animation:scan 6s linear infinite;opacity:.7}
+@keyframes scan{0%{transform:translateX(-110%)}100%{transform:translateX(360%)}}
+.brand{display:flex;align-items:baseline;gap:10px;margin-right:22px}
+.brand .mark{display:none}
+.brand h1{font-size:17px;font-weight:700;letter-spacing:-.02em;white-space:nowrap;
+  background:linear-gradient(92deg,#FFF 30%, #C9D4EC 70%, #8fa2c9);-webkit-background-clip:text;background-clip:text;color:transparent}
+.brand .sub{display:none}
+.ver{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.14em;color:var(--brass);
+  border:1px solid rgba(240,188,82,.4);border-radius:6px;padding:2px 6px;background:rgba(240,188,82,.08)}
+.navlbl{display:none}
+.navbtn{display:inline-flex;align-items:center;gap:8px;background:none;border:1px solid transparent;color:var(--muted);
+  padding:8px 14px;border-radius:999px;font:inherit;font-weight:500;font-size:13px;cursor:pointer;transition:.18s;white-space:nowrap}
+.navbtn:hover{color:var(--text);background:rgba(255,255,255,.05)}
+.navbtn.active{color:#FFE9BC;background:linear-gradient(95deg, rgba(240,188,82,.18), rgba(240,188,82,.05));
+  border-color:rgba(240,188,82,.34);box-shadow:var(--glow-brass)}
+.navbtn .ic{font-size:12px;opacity:.95}
+.rail .foot{margin-left:auto;font-size:10px;color:var(--faint);font-family:'JetBrains Mono',monospace;
+  border:1px solid var(--line);border-radius:999px;padding:6px 13px;background:rgba(255,255,255,.02);white-space:nowrap}
 .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:7px;background:var(--jade);
-  box-shadow:0 0 8px var(--jade);animation:pulse 2.4s ease-in-out infinite}
+  box-shadow:0 0 8px var(--jade);animation:pulse 2.4s ease-in-out infinite;vertical-align:middle}
 .dot.demo{background:var(--amber);box-shadow:0 0 8px var(--amber)}
+.dot.err{background:var(--ember);box-shadow:0 0 8px var(--ember)}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
 
-main{padding:0 32px 70px;max-width:1280px;width:100%}
+main{padding:18px 28px 80px;position:relative;z-index:1}
 
-/* ── command topbar (signature) ── */
-.filters{
-  display:flex;flex-wrap:wrap;gap:9px;align-items:center;
-  position:sticky;top:0;z-index:20;margin:0 -32px 26px;padding:16px 32px;
-  background:linear-gradient(180deg, rgba(8,12,24,.88), rgba(8,12,24,.72));
-  backdrop-filter:blur(18px);border-bottom:1px solid var(--line);overflow:hidden;
-}
-.filters::after{content:'';position:absolute;left:0;bottom:-1px;height:1px;width:34%;
-  background:linear-gradient(90deg, transparent, var(--cyan), transparent);
-  animation:scan 5.5s linear infinite;opacity:.6}
-@keyframes scan{0%{transform:translateX(-110%)}100%{transform:translateX(330%)}}
-.filters .title{font-size:21px;font-weight:700;letter-spacing:-.02em;margin-right:auto;display:flex;align-items:center;gap:11px}
-.filters .title::before{content:'';width:9px;height:9px;border-radius:3px;transform:rotate(45deg);
+/* filter strip */
+.filters{display:flex;flex-wrap:wrap;gap:9px;align-items:center;margin-bottom:22px}
+.filters .title{font-size:26px;font-weight:700;letter-spacing:-.03em;margin-right:auto;display:flex;align-items:center;gap:12px}
+.filters .title::before{content:'';width:10px;height:10px;border-radius:3px;transform:rotate(45deg);
   background:linear-gradient(135deg,var(--brass),var(--brass2));box-shadow:var(--glow-brass)}
 select,input,textarea{
   background:var(--glass2);border:1px solid var(--line);color:var(--text);
-  padding:8px 13px;border-radius:11px;font:inherit;font-size:13px;outline:none;transition:.18s;
-  backdrop-filter:blur(8px)}
+  padding:8px 13px;border-radius:12px;font:inherit;font-size:13px;outline:none;transition:.18s;backdrop-filter:blur(8px)}
 select:hover,input:hover{border-color:var(--line2)}
-select:focus,input:focus,textarea:focus{border-color:rgba(237,184,77,.55);box-shadow:0 0 0 3px rgba(237,184,77,.12)}
+select:focus,input:focus,textarea:focus{border-color:rgba(240,188,82,.55);box-shadow:0 0 0 3px rgba(240,188,82,.12)}
 select{cursor:pointer}
 input[type=date]{color-scheme:dark}
 .btn{background:linear-gradient(135deg,var(--brass),var(--brass2));color:#1A1204;border:0;
-  padding:9px 20px;border-radius:11px;cursor:pointer;font:inherit;font-weight:700;letter-spacing:.01em;
+  padding:9px 20px;border-radius:12px;cursor:pointer;font:inherit;font-weight:700;
   box-shadow:var(--glow-brass), inset 0 1px 0 rgba(255,255,255,.35);transition:.18s}
-.btn:hover{transform:translateY(-1px);box-shadow:0 0 32px rgba(237,184,77,.4), inset 0 1px 0 rgba(255,255,255,.35)}
+.btn:hover{transform:translateY(-1px);box-shadow:0 0 34px rgba(240,188,82,.42), inset 0 1px 0 rgba(255,255,255,.35)}
 .btn:active{transform:translateY(0)}
-.btn.ghost{background:rgba(237,184,77,.06);color:var(--brass);border:1px solid rgba(237,184,77,.35);box-shadow:none}
-.btn.ghost:hover{background:rgba(237,184,77,.14);box-shadow:var(--glow-brass)}
+.btn.ghost{background:rgba(240,188,82,.06);color:var(--brass);border:1px solid rgba(240,188,82,.35);box-shadow:none}
+.btn.ghost:hover{background:rgba(240,188,82,.15);box-shadow:var(--glow-brass)}
 .btn:disabled{opacity:.5;cursor:wait;transform:none}
 
-/* ── cards & grid ── */
+/* ═══ hero band (v3 signature) ═══ */
+.hero{display:grid;grid-template-columns:1.25fr 1fr;gap:30px;align-items:center;
+  padding:28px 32px;margin-bottom:18px;position:relative}
+.hero .eyebrow{font-size:10px;letter-spacing:.26em;text-transform:uppercase;color:var(--brass);font-family:'JetBrains Mono',monospace;margin-bottom:10px}
+.hero .big{font-size:clamp(40px,5.4vw,62px);font-weight:700;letter-spacing:-.03em;line-height:1;
+  font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums;
+  background:linear-gradient(100deg,#FFF 10%, #FFE3A6 45%, var(--brass) 90%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 0 30px rgba(240,188,82,.25))}
+.hero .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.chip{border:1px solid var(--line);border-radius:999px;padding:6px 13px;font-size:11.5px;color:var(--muted);
+  background:rgba(255,255,255,.025);font-family:'JetBrains Mono',monospace}
+.chip b{color:var(--text);font-weight:600}
+.chip.pos b{color:var(--jade)} .chip.neg b{color:var(--ember)}
+.hero .dialside{display:grid;grid-template-columns:auto 1fr;gap:22px;align-items:center}
+
+/* cards & grid */
 .grid{display:grid;gap:16px}
-.kpis{grid-template-columns:repeat(auto-fit,minmax(185px,1fr))}
+.kpis{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
 .card{
   background:var(--glass);border:1px solid var(--line);border-radius:var(--radius);
-  padding:18px 20px;position:relative;overflow:hidden;backdrop-filter:blur(16px);
-  box-shadow:0 14px 40px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.04);
+  padding:19px 21px;position:relative;overflow:hidden;backdrop-filter:blur(18px);
+  box-shadow:0 16px 44px rgba(0,0,0,.38), inset 0 1px 0 rgba(255,255,255,.045);
   transition:border-color .2s, transform .2s, box-shadow .2s;
 }
 .card::before{content:'';position:absolute;inset:0 0 auto 0;height:1px;
-  background:linear-gradient(90deg, transparent, rgba(255,255,255,.14), transparent)}
+  background:linear-gradient(90deg, transparent, rgba(255,255,255,.16), transparent)}
 .view.on .card{animation:rise .5s cubic-bezier(.2,.7,.2,1) both}
 .view.on .card:nth-child(2){animation-delay:.05s}.view.on .card:nth-child(3){animation-delay:.1s}
 .view.on .card:nth-child(4){animation-delay:.15s}.view.on .card:nth-child(5){animation-delay:.2s}.view.on .card:nth-child(6){animation-delay:.25s}
-@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
 .kpi{cursor:default}
-.kpi:hover{transform:translateY(-3px);border-color:rgba(237,184,77,.35);box-shadow:0 18px 44px rgba(0,0,0,.45), var(--glow-brass)}
+.kpi:hover{transform:translateY(-3px);border-color:rgba(240,188,82,.38);box-shadow:0 20px 48px rgba(0,0,0,.5), var(--glow-brass)}
 .kpi .lbl{font-size:9.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);font-family:'JetBrains Mono',monospace}
 .kpi .val{font-size:25px;font-weight:600;margin-top:9px;letter-spacing:-.01em}
-.kpi .delta{font-size:11px;margin-top:5px;font-family:'JetBrains Mono',monospace;letter-spacing:-.01em}
+.kpi .delta{font-size:11px;margin-top:5px;font-family:'JetBrains Mono',monospace}
 .kpi .spark{position:absolute;right:0;bottom:0;left:0;height:38px;opacity:.9;pointer-events:none}
 .up{color:var(--jade)} .down{color:var(--ember)} .flat{color:var(--muted)}
 .card h3{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:16px;
@@ -133,112 +147,108 @@ input[type=date]{color-scheme:dark}
 .two{grid-template-columns:1.6fr 1fr}
 .chartbox{position:relative;height:280px}
 
-/* ── health dial ── */
-.health{display:grid;grid-template-columns:200px 1fr;gap:24px;align-items:center}
-.dialwrap{position:relative;width:184px;height:184px;margin:auto}
-.dialwrap svg{transform:rotate(-90deg);overflow:visible}
+/* health dial */
+.dialwrap{position:relative;width:172px;height:172px}
+.dialwrap svg{transform:rotate(-90deg);overflow:visible;width:100%;height:100%}
 #dialArc{filter:drop-shadow(0 0 10px currentColor)}
 .dialscore{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
-.dialscore .n{font-size:46px;font-weight:700;line-height:1;text-shadow:0 0 26px currentColor}
-.dialscore .t{font-size:9px;letter-spacing:.26em;text-transform:uppercase;color:var(--muted);margin-top:6px;font-family:'JetBrains Mono',monospace}
-.factors{display:flex;flex-direction:column;gap:10px}
-.factor{display:grid;grid-template-columns:150px 1fr 40px;gap:11px;align-items:center;font-size:12.5px;color:var(--muted)}
-.factor .bar{height:7px;background:rgba(8,12,24,.7);border-radius:5px;overflow:hidden;border:1px solid var(--line)}
+.dialscore .n{font-size:42px;font-weight:700;line-height:1;text-shadow:0 0 26px currentColor}
+.dialscore .t{font-size:8.5px;letter-spacing:.26em;text-transform:uppercase;color:var(--muted);margin-top:6px;font-family:'JetBrains Mono',monospace}
+.factors{display:flex;flex-direction:column;gap:9px;min-width:0}
+.factor{display:grid;grid-template-columns:minmax(120px,150px) 1fr 36px;gap:10px;align-items:center;font-size:12px;color:var(--muted)}
+.factor .bar{height:7px;background:rgba(6,10,20,.75);border-radius:5px;overflow:hidden;border:1px solid var(--line)}
 .factor .bar i{display:block;height:100%;border-radius:5px;box-shadow:0 0 10px currentColor;transition:width .7s cubic-bezier(.2,.7,.2,1)}
 .factor .sc{text-align:right;color:var(--text)}
 
-/* ── tables ── */
+/* tables */
 table{width:100%;border-collapse:collapse;font-size:13px}
 th{font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);text-align:left;
   padding:9px 11px;border-bottom:1px solid var(--line2);font-weight:600;font-family:'JetBrains Mono',monospace;white-space:nowrap}
 td{padding:10px 11px;border-bottom:1px solid var(--line)}
-tbody tr,tr{transition:background .15s}
-tr:hover td{background:rgba(120,150,210,.05)}
+tr{transition:background .15s}
+tr:hover td{background:rgba(125,155,215,.055)}
 tr:last-child td{border-bottom:0}
 td:first-child{font-weight:600;color:var(--text)}
 td.r,th.r{text-align:right}
-.pill{display:inline-block;padding:3px 10px;border-radius:20px;font-size:10.5px;font-weight:600;font-family:'JetBrains Mono',monospace;letter-spacing:.02em}
-.pill.good{background:rgba(59,224,160,.12);color:var(--jade);border:1px solid rgba(59,224,160,.3)}
-.pill.warn{background:rgba(240,180,78,.12);color:var(--amber);border:1px solid rgba(240,180,78,.3)}
-.pill.risk{background:rgba(255,110,97,.12);color:var(--ember);border:1px solid rgba(255,110,97,.3)}
-.pace{height:7px;background:rgba(8,12,24,.7);border:1px solid var(--line);border-radius:5px;overflow:hidden;min-width:96px}
+.pill{display:inline-block;padding:3px 10px;border-radius:20px;font-size:10.5px;font-weight:600;font-family:'JetBrains Mono',monospace}
+.pill.good{background:rgba(60,228,164,.12);color:var(--jade);border:1px solid rgba(60,228,164,.3)}
+.pill.warn{background:rgba(242,182,80,.12);color:var(--amber);border:1px solid rgba(242,182,80,.3)}
+.pill.risk{background:rgba(255,111,98,.12);color:var(--ember);border:1px solid rgba(255,111,98,.3)}
+.pace{height:7px;background:rgba(6,10,20,.75);border:1px solid var(--line);border-radius:5px;overflow:hidden;min-width:96px}
 .pace i{display:block;height:100%;border-radius:5px;box-shadow:0 0 8px currentColor;transition:width .7s ease}
 
-/* ── insights ── */
+/* insights */
 .insight{border:1px solid var(--line);border-left:3px solid var(--line2);padding:15px 19px;background:var(--glass);
-  border-radius:14px;margin-bottom:12px;backdrop-filter:blur(14px);transition:.18s;animation:rise .5s cubic-bezier(.2,.7,.2,1) both}
+  border-radius:16px;margin-bottom:12px;backdrop-filter:blur(14px);transition:.18s;animation:rise .5s cubic-bezier(.2,.7,.2,1) both}
 .insight:nth-child(2){animation-delay:.05s}.insight:nth-child(3){animation-delay:.1s}
 .insight:nth-child(4){animation-delay:.15s}.insight:nth-child(5){animation-delay:.2s}.insight:nth-child(6){animation-delay:.25s}
 .insight:hover{transform:translateX(3px)}
 .insight.good{border-left-color:var(--jade);box-shadow:inset 4px 0 22px -12px var(--jade)}
 .insight.warn{border-left-color:var(--amber);box-shadow:inset 4px 0 22px -12px var(--amber)}
 .insight.risk{border-left-color:var(--ember);box-shadow:inset 4px 0 22px -12px var(--ember)}
-.insight h4{font-size:14px;margin-bottom:5px;letter-spacing:-.01em}
+.insight h4{font-size:14px;margin-bottom:5px}
 .insight p{color:var(--muted);font-size:12.5px;line-height:1.6}
 
-/* ── forms ── */
+/* forms */
 .formgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px}
 .field label{display:block;font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin-bottom:7px;font-family:'JetBrains Mono',monospace}
 .field input,.field select,.field textarea{width:100%}
 .formfoot{margin-top:22px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
 .hint{color:var(--faint);font-size:12px;line-height:1.55}
 
-/* ── misc ── */
+/* misc */
 .section{margin-top:20px}
 .empty{color:var(--faint);text-align:center;padding:32px;font-size:13px}
 #toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(24px);opacity:0;pointer-events:none;
-  background:rgba(13,19,36,.92);backdrop-filter:blur(16px);border:1px solid rgba(237,184,77,.4);color:var(--text);
-  padding:12px 22px;border-radius:12px;transition:.3s cubic-bezier(.2,.7,.2,1);z-index:60;font-size:13px;
+  background:rgba(10,15,30,.94);backdrop-filter:blur(16px);border:1px solid rgba(240,188,82,.4);color:var(--text);
+  padding:12px 22px;border-radius:13px;transition:.3s cubic-bezier(.2,.7,.2,1);z-index:60;font-size:13px;max-width:88vw;
   box-shadow:0 18px 50px rgba(0,0,0,.5), var(--glow-brass)}
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-#loader{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:50;flex-direction:column;gap:18px;color:var(--muted)}
+#loader{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:50;flex-direction:column;gap:18px;color:var(--muted);text-align:center;padding:20px}
 #loader .lg{font-size:11px;letter-spacing:.3em;text-transform:uppercase;color:var(--brass);font-family:'JetBrains Mono',monospace}
-.spin{width:44px;height:44px;border-radius:50%;position:relative;
-  background:conic-gradient(from 0deg, transparent 10%, var(--brass), var(--cyan));
+.spin{width:46px;height:46px;border-radius:50%;
+  background:conic-gradient(from 0deg, transparent 12%, var(--brass), var(--cyan));
   -webkit-mask:radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px));
   mask:radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px));
   animation:sp 1s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
 .view{display:none}.view.on{display:block}
-@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
-@media(max-width:900px){
-  .shell{grid-template-columns:1fr}
-  .rail{position:static;height:auto;flex-direction:row;flex-wrap:wrap;align-items:center;padding:12px;gap:6px}
-  .brand{padding:0 8px;margin-right:auto}
-  .brand::after{display:none}
-  .navlbl,.rail .foot{display:none}
-  .navbtn{width:auto;padding:8px 12px;font-size:12.5px}
-  .navbtn.active::before{display:none}
-  .two,.health{grid-template-columns:1fr}
-  main{padding:0 14px 60px}
-  .filters{margin:0 -14px 20px;padding:12px 14px}
-  .filters .title{width:100%;font-size:18px}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}body::before,body::after{animation:none!important}}
+@media(max-width:940px){
+  .rail{padding:11px 14px;gap:5px}
+  .brand{margin-right:8px}
+  .navbtn{padding:7px 11px;font-size:12px}
+  .navbtn .ic{display:none}
+  .rail .foot{width:100%;margin-left:0;text-align:center}
+  main{padding:14px 14px 70px}
+  .filters .title{width:100%;font-size:21px}
   select{flex:1;min-width:0}
+  .hero{grid-template-columns:1fr;gap:22px;padding:22px}
+  .hero .dialside{grid-template-columns:1fr;justify-items:center}
+  .two{grid-template-columns:1fr}
 }
 </style>
 </head>
 <body>
 
-<div id="loader"><div class="spin"></div><div class="lg">Mangalam Realtech</div><div id="loadmsg">Syncing the ledger…</div></div>
+<div id="loader"><div class="spin"></div><div class="lg">Mangalam Realtech · v3</div><div id="loadmsg">Syncing with Google Sheets…</div></div>
+<div class="gridbg"></div>
 
 <div class="shell">
   <nav class="rail">
     <div class="brand">
-      <div class="mark">Mangalam Realtech</div>
       <h1>Business Pulse</h1>
-      <div class="sub">SALES / SOURCES / SITES / SPEND</div>
+      <span class="ver">v3</span>
     </div>
-    <div class="navlbl">Analyse</div>
     <button class="navbtn active" data-view="pulse" data-label="Pulse"><span class="ic">◉</span>Pulse</button>
     <button class="navbtn" data-view="pnl" data-label="P&amp;L"><span class="ic">Σ</span>P&amp;L</button>
     <button class="navbtn" data-view="team" data-label="Team"><span class="ic">⬡</span>Team</button>
     <button class="navbtn" data-view="forecast" data-label="Forecast"><span class="ic">↗</span>Forecast</button>
     <button class="navbtn" data-view="insights" data-label="Insights"><span class="ic">✦</span>Insights</button>
-    <div class="navlbl">Enter</div>
-    <button class="navbtn" data-view="sale" data-label="New booking"><span class="ic">＋</span>New booking</button>
-    <button class="navbtn" data-view="expense" data-label="New expense"><span class="ic">₹</span>New expense</button>
+    <button class="navbtn" data-view="sale" data-label="New booking"><span class="ic">＋</span>Booking</button>
+    <button class="navbtn" data-view="expense" data-label="New expense"><span class="ic">₹</span>Expense</button>
     <button class="navbtn" data-view="projects" data-label="Projects"><span class="ic">▤</span>Projects</button>
-    <div class="foot"><span class="dot" id="connDot"></span><span id="connTxt">Connected</span></div>
+    <div class="foot"><span class="dot" id="connDot"></span><span id="connTxt">Connecting…</span></div>
   </nav>
 
   <main>
@@ -252,6 +262,36 @@ td.r,th.r{text-align:right}
 
     <!-- ═══ PULSE ═══ -->
     <section class="view on" id="view-pulse">
+      <div class="card hero">
+        <div>
+          <div class="eyebrow" id="heroPeriod">Fee income</div>
+          <div class="big num" id="heroFee">–</div>
+          <div class="chips" id="heroChips"></div>
+        </div>
+        <div class="dialside">
+          <div class="dialwrap">
+            <svg viewBox="0 0 184 184">
+              <defs>
+                <linearGradient id="gradGood" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stop-color="#3CE4A4"/><stop offset="100%" stop-color="#5BE3FF"/>
+                </linearGradient>
+                <linearGradient id="gradMid" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stop-color="#F0BC52"/><stop offset="100%" stop-color="#F2B650"/>
+                </linearGradient>
+                <linearGradient id="gradBad" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stop-color="#FF6F62"/><stop offset="100%" stop-color="#F2B650"/>
+                </linearGradient>
+              </defs>
+              <circle cx="92" cy="92" r="78" fill="none" stroke="rgba(125,155,215,.12)" stroke-width="12"/>
+              <circle id="dialArc" cx="92" cy="92" r="78" fill="none" stroke="url(#gradMid)" stroke-width="12"
+                      stroke-linecap="round" stroke-dasharray="490" stroke-dashoffset="490"/>
+            </svg>
+            <div class="dialscore"><div class="n num" id="healthN">–</div><div class="t">Health</div></div>
+          </div>
+          <div class="factors" id="healthFactors"></div>
+        </div>
+      </div>
+
       <div class="grid kpis" id="kpiRow"></div>
 
       <div class="grid two section">
@@ -259,41 +299,15 @@ td.r,th.r{text-align:right}
           <h3>Sales value · fee income · spend — monthly</h3>
           <div class="chartbox"><canvas id="chRevExp"></canvas></div>
         </div>
-        <div class="card health">
-          <div>
-            <div class="dialwrap">
-              <svg width="184" height="184" viewBox="0 0 184 184">
-                <defs>
-                  <linearGradient id="gradGood" x1="0" y1="0" x2="1" y2="1">
-                    <stop offset="0%" stop-color="#3BE0A0"/><stop offset="100%" stop-color="#56E1FF"/>
-                  </linearGradient>
-                  <linearGradient id="gradMid" x1="0" y1="0" x2="1" y2="1">
-                    <stop offset="0%" stop-color="#EDB84D"/><stop offset="100%" stop-color="#F0B44E"/>
-                  </linearGradient>
-                  <linearGradient id="gradBad" x1="0" y1="0" x2="1" y2="1">
-                    <stop offset="0%" stop-color="#FF6E61"/><stop offset="100%" stop-color="#F0B44E"/>
-                  </linearGradient>
-                </defs>
-                <circle cx="92" cy="92" r="78" fill="none" stroke="rgba(120,150,210,.12)" stroke-width="12"/>
-                <circle id="dialArc" cx="92" cy="92" r="78" fill="none" stroke="url(#gradMid)" stroke-width="12"
-                        stroke-linecap="round" stroke-dasharray="490" stroke-dashoffset="490"/>
-              </svg>
-              <div class="dialscore"><div class="n num" id="healthN">–</div><div class="t">Health score</div></div>
-            </div>
-          </div>
-          <div class="factors" id="healthFactors"></div>
-        </div>
-      </div>
-
-      <div class="grid two section">
-        <div class="card">
-          <h3>Source performance — spend vs result</h3>
-          <div style="overflow-x:auto"><table id="tblSource"></table></div>
-        </div>
         <div class="card">
           <h3>Booking mix by source</h3>
           <div class="chartbox"><canvas id="chSourceMix"></canvas></div>
         </div>
+      </div>
+
+      <div class="card section">
+        <h3>Source performance — spend vs result</h3>
+        <div style="overflow-x:auto"><table id="tblSource"></table></div>
       </div>
 
       <div class="card section">
@@ -476,86 +490,190 @@ const fyMonths = fy => MONTHS.map((lbl,i) => {
 });
 const toast = m => { const t=$('toast'); t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2800); };
 
-/* ── data access ── */
+/* ── data access ──
+   Primary: fetch. Fallback: JSONP (script tag) — immune to CORS, works with
+   any Apps Script deployment set to "Anyone". Writes fall back to GET params. */
+function jsonp(params) {
+  return new Promise((resolve, reject) => {
+    const cb = '__bp_cb' + Date.now() + Math.floor(Math.random()*1e4);
+    const s = document.createElement('script');
+    const clean = () => { try { delete window[cb]; } catch(e){ window[cb]=undefined; } s.remove(); };
+    window[cb] = d => { clean(); resolve(d); };
+    s.onerror = () => { clean(); reject(new Error('Could not reach Apps Script (check deployment access = Anyone)')); };
+    const q = new URLSearchParams({ ...params, callback: cb }).toString();
+    s.src = CONFIG.API_URL + (CONFIG.API_URL.includes('?') ? '&' : '?') + q;
+    document.body.appendChild(s);
+    setTimeout(() => { if (window[cb]) { clean(); reject(new Error('Apps Script timed out')); } }, 25000);
+  });
+}
 async function apiGet(action) {
-  const r = await fetch(CONFIG.API_URL + '?action=' + action, { redirect: 'follow' });
-  return r.json();
+  try {
+    const r = await fetch(CONFIG.API_URL + '?action=' + action, { redirect: 'follow' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return await r.json();
+  } catch (e) {
+    console.warn('fetch GET failed → JSONP fallback:', e.message);
+    return jsonp({ action });
+  }
 }
 async function apiPost(payload) {
-  const r = await fetch(CONFIG.API_URL, {
-    method: 'POST', redirect: 'follow',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify(payload)
-  });
-  return r.json();
+  try {
+    const r = await fetch(CONFIG.API_URL, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return await r.json();
+  } catch (e) {
+    console.warn('fetch POST failed → JSONP fallback:', e.message);
+    return jsonp(payload);   // backend accepts writes via GET params too
+  }
 }
 
 async function loadData() {
   $('loader').style.display = 'flex';
+  const setConn = (mode, txt) => {
+    $('connDot').className = 'dot' + (mode === 'live' ? '' : mode === 'demo' ? ' demo' : ' err');
+    $('connTxt').textContent = txt;
+  };
   try {
     if (!CONFIG.API_URL) {
       DB = demoData();
-      $('connDot').classList.add('demo');
-      $('connTxt').textContent = 'Demo data — set API_URL';
+      setConn('demo', 'Demo data — set API_URL');
     } else {
+      $('loadmsg').textContent = 'Syncing with Google Sheets…';
       const d = await apiGet('data');
       if (d.error) throw new Error(d.error);
+      if (!Array.isArray(d.sales)) throw new Error('Unexpected response — is the latest Code.gs deployed?');
       DB = d;
-      $('connDot').classList.remove('demo');
-      $('connTxt').textContent = 'Live · Google Sheets';
+      const nb = DB.sales.length, ne = (DB.expenses||[]).length;
+      if (nb === 0 && d.sheetsFound && !d.sheetsFound.sales) {
+        setConn('demo', 'Live · Sales sheet not found');
+        toast('Connected, but no Sales_Log / Sales / Bookings tab was found — run setupSheets() in Apps Script');
+      } else if (nb === 0) {
+        setConn('demo', 'Live · 0 bookings found');
+        toast('Connected to the Sheet, but Sales_Log has no data rows yet');
+      } else {
+        setConn('live', 'Live · ' + nb + ' bookings · ' + ne + ' expenses');
+      }
     }
     initFilters();
     renderAll();
   } catch (err) {
-    $('loadmsg').textContent = 'Could not load data: ' + err.message;
-    return;
+    console.error('loadData failed:', err);
+    DB = demoData();
+    initFilters();
+    renderAll();
+    setConn('err', 'Offline — demo shown');
+    toast('Could not reach Google Sheets: ' + err.message);
   }
   $('loader').style.display = 'none';
+}
+
+/* ── flexible parsing: tolerate header spelling, date & number formats ── */
+const nkey = s => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
+const nrm = s => String(s ?? '').trim().toLowerCase();
+const keymap = obj => { const m = {}; Object.keys(obj).forEach(k => m[nkey(k)] = obj[k]); return m; };
+const pick = (m, ...aliases) => {
+  for (const a of aliases) { const v = m[nkey(a)]; if (v !== undefined && v !== '' && v !== null) return v; }
+  return undefined;
+};
+const toNum = v => {
+  if (typeof v === 'number') return isFinite(v) ? v : 0;
+  if (v == null) return 0;
+  const n = parseFloat(String(v).replace(/[\u20B9,\s]/g, ''));
+  return isFinite(n) ? n : 0;
+};
+const toDate = v => {
+  if (v instanceof Date) return isNaN(v) ? null : v;
+  if (v == null || v === '') return null;
+  const s = String(v).trim();
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);                 // yyyy-mm-dd
+  if (m) return new Date(+m[1], +m[2]-1, +m[3]);
+  m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);   // dd/mm/yyyy (India)
+  if (m) { let y = +m[3]; if (y < 100) y += 2000; return new Date(y, +m[2]-1, +m[1]); }
+  const d = new Date(s);
+  return isNaN(d) ? null : d;
+};
+
+/* ── normalised project master (header-flexible) ── */
+function PJ() {
+  return (DB.projects || []).map(r => {
+    const m = keymap(r);
+    return {
+      id: pick(m, 'project id', 'id') || '',
+      name: String(pick(m, 'project name', 'name', 'project', 'site') || '').trim(),
+      location: pick(m, 'location', 'area', 'city') || '',
+      units: toNum(pick(m, 'total units', 'units', 'no of units')),
+      status: pick(m, 'status') || 'Active',
+      targetRevCr: toNum(pick(m, 'fy target revenue (cr)', 'fy target revenue', 'target revenue', 'target revenue cr', 'target (cr)')),
+      targetBk: toNum(pick(m, 'fy target bookings', 'target bookings', 'booking target')),
+      commission: toNum(pick(m, 'commission %', 'commission', 'commission pct', 'fee %'))
+    };
+  }).filter(p => p.name);
 }
 
 /* ── commission rate per project ──
    Priority: 'Commission %' column in Projects → else 4.75% if the project
    name contains "Aikyam" → else 5% (Realtech's standard rate). */
 function rateOf(projectName) {
-  const p = (DB.projects || []).find(x => x['Project Name'] === projectName);
-  const r = Number(p && p['Commission %']);
-  if (r > 0) return r / 100;
+  const p = PJ().find(x => nrm(x.name) === nrm(projectName));
+  if (p && p.commission > 0) return p.commission / 100;
   return /aikyam/i.test(projectName || '') ? 0.0475 : 0.05;
 }
 
 /* ── normalise rows ── */
 function normSales() {
-  return DB.sales.map(r => {
-    const value = Number(r['Agreement Value']) || 0;
+  return (DB.sales || []).map(r => {
+    const m = keymap(r);
+    const value = toNum(pick(m, 'agreement value', 'value', 'sale value', 'deal value', 'agreement cost', 'flat value', 'amount'));
+    const project = String(pick(m, 'project', 'project name', 'site') || '').trim();
     return {
-      id: r['Booking ID'], date: parseDate(r['Date']), project: r['Project'],
-      source: r['Source'], sub: r['Sub-Source'], person: r['Sales Person'],
-      value, fee: value * rateOf(r['Project']),
-      received: Number(r['Amount Received']) || 0,
-      status: r['Status'] || 'Booked'
+      id: pick(m, 'booking id', 'id') || '',
+      date: toDate(pick(m, 'date', 'booking date', 'sale date')),
+      project,
+      source: String(pick(m, 'source', 'lead source', 'channel') || 'Direct Walk-in').trim(),
+      sub: pick(m, 'sub-source', 'sub source', 'cp name', 'campaign') || '',
+      person: String(pick(m, 'sales person', 'salesperson', 'sales executive', 'executive', 'closed by', 'person') || '').trim(),
+      value, fee: value * rateOf(project),
+      received: toNum(pick(m, 'amount received', 'received', 'booking amount', 'token amount', 'token')),
+      status: String(pick(m, 'status', 'booking status') || 'Booked').trim()
     };
-  }).filter(s => s.date && !isNaN(s.date));
+  }).filter(s => s.date && s.project);
 }
 function normExpenses() {
   const map = {};
-  (DB.expenseCategories || []).forEach(c => map[c.category] = c.source);
-  return DB.expenses.map(r => ({
-    id: r['Expense ID'], date: parseDate(r['Date']), scope: r['Scope'] || 'CENTRAL',
-    category: r['Category'], desc: r['Description'],
-    amount: Number(r['Amount']) || 0,
-    source: map[r['Category']] || 'Other'
-  })).filter(e => e.date && !isNaN(e.date));
+  (DB.expenseCategories || []).forEach(c => map[nkey(c.category)] = c.source);
+  return (DB.expenses || []).map(r => {
+    const m = keymap(r);
+    const category = String(pick(m, 'category', 'expense head', 'head', 'type') || 'Other').trim();
+    return {
+      id: pick(m, 'expense id', 'id') || '',
+      date: toDate(pick(m, 'date', 'expense date')),
+      scope: String(pick(m, 'scope', 'project', 'site', 'allocation') || 'CENTRAL').trim(),
+      category,
+      desc: pick(m, 'description', 'desc', 'particulars', 'details') || '',
+      amount: toNum(pick(m, 'amount', 'value', 'cost', 'expense')),
+      source: map[nkey(category)] || 'Other'
+    };
+  }).filter(e => e.date && e.amount > 0);
 }
 
 function normTeam() {
-  return (DB.team || []).map(r => ({
-    id: r['Employee ID'], name: String(r['Name'] || '').trim(),
-    role: r['Role'] || '', site: r['Site'] || 'CENTRAL',
-    salary: Number(r['Monthly Salary']) || 0,
-    incPct: Number(r['Incentive % (of sale value)']) || 0,
-    target: Number(r['Monthly Booking Target']) || 0,
-    status: r['Status'] || 'Active'
-  })).filter(e => e.name);
+  return (DB.team || []).map(r => {
+    const m = keymap(r);
+    return {
+      id: pick(m, 'employee id', 'id') || '',
+      name: String(pick(m, 'name', 'employee name', 'employee') || '').trim(),
+      role: pick(m, 'role', 'designation') || '',
+      site: String(pick(m, 'site', 'project', 'location') || 'CENTRAL').trim(),
+      salary: toNum(pick(m, 'monthly salary', 'salary', 'monthly ctc')),
+      incPct: toNum(pick(m, 'incentive % (of sale value)', 'incentive %', 'incentive', 'incentive pct')),
+      target: toNum(pick(m, 'monthly booking target', 'booking target', 'target')),
+      status: pick(m, 'status') || 'Active'
+    };
+  }).filter(e => e.name);
 }
 
 /* ── filters ── */
@@ -568,7 +686,7 @@ function initFilters() {
   if (F.fy === null || !fys.has(F.fy)) F.fy = sorted[0];
   $('fFY').innerHTML = sorted.map(y => `<option value="${y}" ${y===F.fy?'selected':''}>${fyLabel(y)}</option>`).join('');
   $('fMonth').innerHTML = '<option value="all">Full year</option>' + MONTHS.map((m,i)=>`<option value="${i}" ${String(i)===String(F.month)?'selected':''}>${m}</option>`).join('');
-  const projNames = DB.projects.map(p => p['Project Name']);
+  const projNames = PJ().map(p => p.name);
   $('fProject').innerHTML = '<option value="all">All projects</option>' + projNames.map(p=>`<option ${p===F.project?'selected':''}>${esc(p)}</option>`).join('');
   // entry form selects
   $('sProject').innerHTML = projNames.map(p=>`<option>${esc(p)}</option>`).join('');
@@ -591,7 +709,7 @@ function inRange(d) {
 /* ════════════════ ANALYTICS ENGINE ════════════════ */
 function analyse() {
   const allSales = normSales(), allExps = normExpenses();
-  const projFilter = s => F.project === 'all' || s === F.project;
+  const projFilter = s => F.project === 'all' || nrm(s) === nrm(F.project);
 
   // period slices (FY + month filter)
   const sales = allSales.filter(s => inRange(s.date));
@@ -612,7 +730,7 @@ function analyse() {
   allExps.forEach(e => {
     const i = idx[monthKey(e.date)];
     if (i === undefined) return;
-    if (F.project !== 'all' && e.scope !== 'CENTRAL' && e.scope !== F.project) return;
+    if (F.project !== 'all' && nrm(e.scope) !== 'central' && nrm(e.scope) !== nrm(F.project)) return;
     series[i].expense += e.amount;   // note: central included fully when a project is selected? no — allocate below
   });
   // For a single-project view, replace expense series with direct + allocated share
@@ -621,15 +739,15 @@ function analyse() {
     const revByProjMonth = {};   // key|proj -> fee income (allocation weight)
     allSales.filter(s=>s.status!=='Cancelled').forEach(s => {
       const k = monthKey(s.date); revByProjMonth[k] = revByProjMonth[k] || {};
-      revByProjMonth[k][s.project] = (revByProjMonth[k][s.project]||0) + s.fee;
+      revByProjMonth[k][nrm(s.project)] = (revByProjMonth[k][nrm(s.project)]||0) + s.fee;
     });
     allExps.forEach(e => {
       const i = idx[monthKey(e.date)]; if (i===undefined) return;
-      if (e.scope === F.project) series[i].expense += e.amount;
-      else if (e.scope === 'CENTRAL') {
+      if (nrm(e.scope) === nrm(F.project)) series[i].expense += e.amount;
+      else if (nrm(e.scope) === 'central') {
         const rm = revByProjMonth[monthKey(e.date)] || {};
         const tot = Object.values(rm).reduce((a,b)=>a+b,0);
-        const share = tot > 0 ? (rm[F.project]||0)/tot : 1/Math.max(1,DB.projects.length);
+        const share = tot > 0 ? (rm[nrm(F.project)]||0)/tot : 1/Math.max(1,PJ().length||1);
         series[i].expense += e.amount * share;
       }
     });
@@ -645,12 +763,12 @@ function analyse() {
   if (F.project === 'all') expense = exps.reduce((a,e)=>a+e.amount,0);
   else {
     const revByProj = {};
-    active.forEach(s => revByProj[s.project]=(revByProj[s.project]||0)+s.fee);
+    active.forEach(s => revByProj[nrm(s.project)]=(revByProj[nrm(s.project)]||0)+s.fee);
     const totRev = Object.values(revByProj).reduce((a,b)=>a+b,0);
     exps.forEach(e => {
-      if (e.scope === F.project) expense += e.amount;
-      else if (e.scope === 'CENTRAL')
-        expense += e.amount * (totRev>0 ? (revByProj[F.project]||0)/totRev : 1/Math.max(1,DB.projects.length));
+      if (nrm(e.scope) === nrm(F.project)) expense += e.amount;
+      else if (nrm(e.scope) === 'central')
+        expense += e.amount * (totRev>0 ? (revByProj[nrm(F.project)]||0)/totRev : 1/Math.max(1,PJ().length||1));
     });
   }
 
@@ -663,28 +781,28 @@ function analyse() {
   });
   const overheads = {};
   exps.forEach(e => {
-    if (F.project !== 'all' && e.scope !== 'CENTRAL' && e.scope !== F.project) return;
+    if (F.project !== 'all' && nrm(e.scope) !== 'central' && nrm(e.scope) !== nrm(F.project)) return;
     if (bySource[e.source]) bySource[e.source].spend += e.amount;
     else overheads[e.source] = (overheads[e.source]||0) + e.amount;
   });
 
   // site table (FY-or-month period, all projects always shown)
-  const sites = DB.projects.map(p => {
-    const name = p['Project Name'];
-    const ps = active.filter(s => s.project === name);
+  const sites = PJ().map(p => {
+    const name = p.name;
+    const ps = active.filter(s => nrm(s.project) === nrm(name));
     return {
-      name, status: p['Status'],
+      name, status: p.status,
       rate: rateOf(name),
-      targetRev: (Number(p['FY Target Revenue (Cr)'])||0)*1e7,
-      targetBk: Number(p['FY Target Bookings'])||0,
+      targetRev: p.targetRevCr*1e7,
+      targetBk: p.targetBk,
       revenue: ps.reduce((a,s)=>a+s.value,0),
       fee: ps.reduce((a,s)=>a+s.fee,0),
       bookings: ps.length,
-      direct: exps.filter(e=>e.scope===name).reduce((a,e)=>a+e.amount,0),
+      direct: exps.filter(e=>nrm(e.scope)===nrm(name)).reduce((a,e)=>a+e.amount,0),
       allocated: 0
     };
   });
-  const centralTotal = exps.filter(e=>e.scope==='CENTRAL').reduce((a,e)=>a+e.amount,0);
+  const centralTotal = exps.filter(e=>nrm(e.scope)==='central').reduce((a,e)=>a+e.amount,0);
   const totSiteFee = sites.reduce((a,s)=>a+s.fee,0);
   sites.forEach(s => s.allocated = centralTotal * (totSiteFee>0 ? s.fee/totSiteFee : 1/Math.max(1,sites.length)));
 
@@ -693,14 +811,14 @@ function analyse() {
   const now = new Date();
   const fyStart = new Date(F.fy,3,1), fyEnd = new Date(F.fy+1,2,31);
   const elapsed = Math.min(1, Math.max(0.04,(Math.min(now,fyEnd)-fyStart)/(fyEnd-fyStart)));
-  const pacing = DB.projects.map(p => {
-    const name=p['Project Name'];
-    const mine = fySales.filter(s=>s.project===name);
+  const pacing = PJ().map(p => {
+    const name = p.name;
+    const mine = fySales.filter(s=>nrm(s.project)===nrm(name));
     const rev = mine.reduce((a,s)=>a+s.value,0);
     const pFee = mine.reduce((a,s)=>a+s.fee,0);
     const bk = mine.length;
-    const tR = (Number(p['FY Target Revenue (Cr)'])||0)*1e7;
-    const tB = Number(p['FY Target Bookings'])||0;
+    const tR = p.targetRevCr*1e7;
+    const tB = p.targetBk;
     return { name, rev, fee:pFee, bk, tR, tB,
       tFee: tR * rateOf(name),                 // fee-equivalent target
       pace: tR>0 ? (rev/tR)/elapsed : null,
@@ -754,8 +872,8 @@ function analyse() {
   const incentiveTotal = team.reduce((a,t) => a + t.incentive, 0);
 
   const catAmt = {};
-  exps.forEach(e => catAmt[e.category] = (catAmt[e.category] || 0) + e.amount);
-  const cat = n => catAmt[n] || 0;
+  exps.forEach(e => catAmt[nkey(e.category)] = (catAmt[nkey(e.category)] || 0) + e.amount);
+  const cat = n => catAmt[nkey(n)] || 0;
   const feeAll = active.reduce((a,s) => a + s.fee, 0);
   const gdvAll = active.reduce((a,s) => a + s.value, 0);
   const bkAll = active.length;
@@ -942,12 +1060,12 @@ function renderAll() {
 function renderPnl(A) {
   const P = A.pnl;
   const cards = [
-    ['Operating profit', P.opProfit, fmt, P.opProfit>=0?'after all costs':'running at a loss', null, P.opProfit>=0?'#3BE0A0':'#FF6E61', P.opProfit>=0?'up':'down'],
-    ['Operating margin', P.margin, v=>v==null||!isFinite(v)?'–':pct(v), 'of fee income', null, '#56E1FF'],
-    ['People cost ratio', P.feeAll?P.peopleCost/P.feeAll:null, v=>v==null||!isFinite(v)?'–':pct(v), fmt(P.peopleCost)+' payroll + incentives', null, '#9B85FF'],
-    ['Incentive accrued', P.incentiveTotal, fmt, 'earned by team on bookings', null, '#EDB84D'],
-    ['Break-even bookings', P.breakEvenBk, v=>v==null?'–':Math.round(v)+' / month', 'to cover fixed costs', null, '#F0B44E'],
-    ['Fee per team member', P.feePerHead, v=>v==null||!isFinite(v)?'–':fmt(v), (A.roster.length||0)+' on roster', null, '#3BE0A0']
+    ['Operating profit', P.opProfit, fmt, P.opProfit>=0?'after all costs':'running at a loss', null, P.opProfit>=0?'#3CE4A4':'#FF6F62', P.opProfit>=0?'up':'down'],
+    ['Operating margin', P.margin, v=>v==null||!isFinite(v)?'–':pct(v), 'of fee income', null, '#5BE3FF'],
+    ['People cost ratio', P.feeAll?P.peopleCost/P.feeAll:null, v=>v==null||!isFinite(v)?'–':pct(v), fmt(P.peopleCost)+' payroll + incentives', null, '#A18BFF'],
+    ['Incentive accrued', P.incentiveTotal, fmt, 'earned by team on bookings', null, '#F0BC52'],
+    ['Break-even bookings', P.breakEvenBk, v=>v==null?'–':Math.round(v)+' / month', 'to cover fixed costs', null, '#F2B650'],
+    ['Fee per team member', P.feePerHead, v=>v==null||!isFinite(v)?'–':fmt(v), (A.roster.length||0)+' on roster', null, '#3CE4A4']
   ];
   $('pnlCards').innerHTML = cards.map(([l,,,d,,,cls]) =>
     `<div class="card kpi"><div class="lbl">${l}</div><div class="val num">–</div><div class="delta ${cls||'flat'}">${d}</div></div>`).join('');
@@ -970,20 +1088,20 @@ function renderPnl(A) {
 
   killChart('pnl');
   const segs = [
-    ['Variable selling', P.variableSelling, '#FF6E61'],
-    ['Payroll', P.payroll, '#9B85FF'],
-    ['Incentives', P.incentiveTotal, '#EDB84D'],
-    ['Overheads', P.mktOverhead + P.otherCost, '#F0B44E'],
-    ['Profit', Math.max(0, P.opProfit), '#3BE0A0']
+    ['Variable selling', P.variableSelling, '#FF6F62'],
+    ['Payroll', P.payroll, '#A18BFF'],
+    ['Incentives', P.incentiveTotal, '#F0BC52'],
+    ['Overheads', P.mktOverhead + P.otherCost, '#F2B650'],
+    ['Profit', Math.max(0, P.opProfit), '#3CE4A4']
   ].filter(s => s[1] > 0);
   charts.pnl = new Chart($('chPnl'), {
     type:'doughnut',
     data:{ labels: segs.map(s=>s[0]),
       datasets:[{ data: segs.map(s=>s[1]), backgroundColor: segs.map(s=>s[2]),
-        borderColor:'#0B1120', borderWidth:3, hoverOffset:8 }]},
+        borderColor:'#0A0F1E', borderWidth:3, hoverOffset:8 }]},
     options:{ maintainAspectRatio:false, cutout:'68%',
       plugins:{ legend:{position:'bottom', labels:{usePointStyle:true, pointStyle:'circle', boxWidth:7, padding:14}},
-        tooltip:{ backgroundColor:'rgba(11,17,32,.95)', borderColor:'rgba(237,184,77,.35)', borderWidth:1, padding:12,
+        tooltip:{ backgroundColor:'rgba(11,17,32,.95)', borderColor:'rgba(240,188,82,.35)', borderWidth:1, padding:12,
           callbacks:{label:c=>' '+c.label+': '+fmt(c.raw)+(P.feeAll?' ('+pct(c.raw/P.feeAll)+' of fee)':'')} } } }
   });
 }
@@ -992,10 +1110,10 @@ function renderTeam(A) {
   const T = A.team, P = A.pnl;
   const top = T.find(t => t.fee > 0);
   const cards = [
-    ['Top performer', null, ()=> top ? esc(top.name) : '–', top? fmt(top.fee)+' fee · '+top.bookings+' bookings' : 'no bookings in period', null, '#EDB84D'],
-    ['Payroll % of fee', P.feeAll?P.payroll/P.feeAll:null, v=>v==null||!isFinite(v)?'–':pct(v), fmt(P.payroll)+' over '+P.mip+' month'+(P.mip>1?'s':''), null, '#9B85FF'],
-    ['Incentive accrued', P.incentiveTotal, fmt, 'auto: sale value × incentive rate', null, '#3BE0A0'],
-    ['Bookings per head / month', A.roster.length? P.bkAll/(A.roster.length*P.mip) : null, v=>v==null||!isFinite(v)?'–':v.toFixed(1), 'sales productivity', null, '#56E1FF']
+    ['Top performer', null, ()=> top ? esc(top.name) : '–', top? fmt(top.fee)+' fee · '+top.bookings+' bookings' : 'no bookings in period', null, '#F0BC52'],
+    ['Payroll % of fee', P.feeAll?P.payroll/P.feeAll:null, v=>v==null||!isFinite(v)?'–':pct(v), fmt(P.payroll)+' over '+P.mip+' month'+(P.mip>1?'s':''), null, '#A18BFF'],
+    ['Incentive accrued', P.incentiveTotal, fmt, 'auto: sale value × incentive rate', null, '#3CE4A4'],
+    ['Bookings per head / month', A.roster.length? P.bkAll/(A.roster.length*P.mip) : null, v=>v==null||!isFinite(v)?'–':v.toFixed(1), 'sales productivity', null, '#5BE3FF']
   ];
   $('teamCards').innerHTML = cards.map(([l,,,d]) =>
     `<div class="card kpi"><div class="lbl">${l}</div><div class="val num">–</div><div class="delta flat">${d}</div></div>`).join('');
@@ -1021,12 +1139,12 @@ function renderTeam(A) {
     type:'bar',
     data:{ labels: top10.map(t=>t.name),
       datasets:[
-        { label:'Fee generated', data: top10.map(t=>t.fee), backgroundColor:'rgba(59,224,160,.65)', borderColor:'#3BE0A0', borderWidth:1, borderRadius:5 },
-        { label:'Cost to company', data: top10.map(t=>t.cost), backgroundColor:'rgba(255,110,97,.55)', borderColor:'#FF6E61', borderWidth:1, borderRadius:5 }
+        { label:'Fee generated', data: top10.map(t=>t.fee), backgroundColor:'rgba(60,228,164,.65)', borderColor:'#3CE4A4', borderWidth:1, borderRadius:5 },
+        { label:'Cost to company', data: top10.map(t=>t.cost), backgroundColor:'rgba(255,111,98,.55)', borderColor:'#FF6F62', borderWidth:1, borderRadius:5 }
       ]},
     options:{ indexAxis:'y', maintainAspectRatio:false,
       plugins:{ legend:{position:'bottom', labels:{usePointStyle:true, pointStyle:'rectRounded', boxWidth:8, padding:16}},
-        tooltip:{ backgroundColor:'rgba(11,17,32,.95)', borderColor:'rgba(237,184,77,.35)', borderWidth:1, padding:12,
+        tooltip:{ backgroundColor:'rgba(11,17,32,.95)', borderColor:'rgba(240,188,82,.35)', borderWidth:1, padding:12,
           callbacks:{label:c=>' '+c.dataset.label+': '+fmt(c.raw)} } },
       scales:{ x:{ ticks:{ callback:v=>fmt(v), font:{family:"'JetBrains Mono', monospace", size:10} } }, y:{ grid:{display:false} } } }
   });
@@ -1061,13 +1179,26 @@ function renderKPIs(A) {
   const cpb = A.bookings ? A.expense/A.bookings : null;
   const net = A.fee - A.expense;
   const S = A.series;
+
+  // hero band
+  $('heroPeriod').textContent = 'Fee income · ' + fyLabel(F.fy)
+    + (F.month !== 'all' ? ' · ' + MONTHS[Number(F.month)] : '')
+    + (F.project !== 'all' ? ' · ' + F.project : '');
+  countUp($('heroFee'), A.fee, fmt);
+  $('heroChips').innerHTML = [
+    `<span class="chip"><b>${fmt(A.revenue)}</b> sales value</span>`,
+    `<span class="chip"><b>${A.bookings}</b> bookings</span>`,
+    `<span class="chip"><b>${fmt(A.expense)}</b> spend</span>`,
+    `<span class="chip ${net>=0?'pos':'neg'}"><b>${fmt(net)}</b> net</span>`,
+    `<span class="chip"><b>${fmt(A.received)}</b> collected</span>`
+  ].join('');
+
   const cards = [
-    ['Sales value / GDV', A.revenue, fmt, A.bookings + ' bookings', S.map(m=>m.revenue), '#EDB84D'],
-    ['Fee income', A.fee, fmt, 'auto @ 4.75% Aikyam · 5% others', S.map(m=>m.fee), '#3BE0A0'],
-    ['S&M spend', A.expense, fmt, pct(A.fee?A.expense/A.fee:NaN) + ' of fee income', S.map(m=>m.expense), '#FF6E61'],
-    ['Net contribution', net, fmt, net>=0?'fee income covers spend':'spend exceeds fee income', S.map(m=>m.fee-m.expense), '#56E1FF', net>=0?'up':'down'],
-    ['Cost per booking', cpb, v=>v==null||!isFinite(v)?'–':fmt(v), 'blended, all sources', S.map(m=>m.bookings?m.expense/m.bookings:0), '#9B85FF'],
-    ['Avg ticket size', A.bookings?A.revenue/A.bookings:null, v=>v==null||!isFinite(v)?'–':fmt(v), 'agreement value', S.map(m=>m.bookings?m.revenue/m.bookings:0), '#EDB84D']
+    ['Sales value / GDV', A.revenue, fmt, A.bookings + ' bookings', S.map(m=>m.revenue), '#F0BC52'],
+    ['S&M spend', A.expense, fmt, pct(A.fee?A.expense/A.fee:NaN) + ' of fee income', S.map(m=>m.expense), '#FF6F62'],
+    ['Net contribution', net, fmt, net>=0?'fee income covers spend':'spend exceeds fee income', S.map(m=>m.fee-m.expense), '#5BE3FF', net>=0?'up':'down'],
+    ['Cost per booking', cpb, v=>v==null||!isFinite(v)?'–':fmt(v), 'blended, all sources', S.map(m=>m.bookings?m.expense/m.bookings:0), '#A18BFF'],
+    ['Avg ticket size', A.bookings?A.revenue/A.bookings:null, v=>v==null||!isFinite(v)?'–':fmt(v), 'agreement value', S.map(m=>m.bookings?m.revenue/m.bookings:0), '#3CE4A4']
   ];
   $('kpiRow').innerHTML = cards.map(([l,,,d,sd,color,cls]) =>
     `<div class="card kpi" style="padding-bottom:40px"><div class="lbl">${l}</div><div class="val num">–</div>
@@ -1079,14 +1210,14 @@ function renderHealth(A) {
   const h = A.health;
   $('healthN').textContent = h.score;
   const arc = $('dialArc');
-  const col = h.score>=70?'#3BE0A0':h.score>=45?'#EDB84D':'#FF6E61';
+  const col = h.score>=70?'#3CE4A4':h.score>=45?'#F0BC52':'#FF6F62';
   arc.style.stroke = h.score>=70?'url(#gradGood)':h.score>=45?'url(#gradMid)':'url(#gradBad)';
   arc.style.color = col; // drives the drop-shadow glow
   arc.style.transition = 'stroke-dashoffset .9s cubic-bezier(.2,.7,.2,1)';
   requestAnimationFrame(()=>arc.style.strokeDashoffset = 490 - 490*(h.score/100)*0.999);
   $('healthN').style.color = col;
   $('healthFactors').innerHTML = h.factors.map(f => {
-    const c = f.s>=70?'#3BE0A0':f.s>=45?'#EDB84D':'#FF6E61';
+    const c = f.s>=70?'#3CE4A4':f.s>=45?'#F0BC52':'#FF6F62';
     return `<div class="factor"><span title="${esc(f.note)}">${f.name}</span>
       <span class="bar"><i style="width:${f.s}%;background:${c};color:${c}"></i></span>
       <span class="sc num">${Math.round(f.s)}</span></div>`;
@@ -1109,19 +1240,19 @@ function renderCharts(A) {
   killChart('rev');
   const rctx = $('chRevExp').getContext('2d');
   const gBrass = rctx.createLinearGradient(0,0,0,280);
-  gBrass.addColorStop(0,'rgba(237,184,77,.55)'); gBrass.addColorStop(1,'rgba(237,184,77,.04)');
+  gBrass.addColorStop(0,'rgba(240,188,82,.55)'); gBrass.addColorStop(1,'rgba(240,188,82,.04)');
   charts.rev = new Chart($('chRevExp'), {
     data: { labels, datasets: [
       { type:'bar', label:'Sales value (GDV)', data:A.series.map(m=>m.revenue), backgroundColor:gBrass,
-        borderColor:'rgba(237,184,77,.8)', borderWidth:{top:1.5,left:0,right:0,bottom:0}, borderRadius:6, yAxisID:'y' },
-      { type:'line', label:'Fee income', data:A.series.map(m=>m.fee), borderColor:'#3BE0A0', backgroundColor:'#3BE0A0',
+        borderColor:'rgba(240,188,82,.8)', borderWidth:{top:1.5,left:0,right:0,bottom:0}, borderRadius:6, yAxisID:'y' },
+      { type:'line', label:'Fee income', data:A.series.map(m=>m.fee), borderColor:'#3CE4A4', backgroundColor:'#3CE4A4',
         tension:.35, pointRadius:2.5, pointHoverRadius:5, borderWidth:2, yAxisID:'y1' },
-      { type:'line', label:'Spend', data:A.series.map(m=>m.expense), borderColor:'#FF6E61', backgroundColor:'#FF6E61',
+      { type:'line', label:'Spend', data:A.series.map(m=>m.expense), borderColor:'#FF6F62', backgroundColor:'#FF6F62',
         tension:.35, pointRadius:2.5, pointHoverRadius:5, borderWidth:2, yAxisID:'y1' }
     ]},
     options: { maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
       plugins:{ legend:{position:'bottom', labels:{usePointStyle:true, pointStyle:'rectRounded', boxWidth:8, padding:16}},
-        tooltip:{ backgroundColor:'rgba(11,17,32,.95)', borderColor:'rgba(237,184,77,.35)', borderWidth:1, padding:12,
+        tooltip:{ backgroundColor:'rgba(11,17,32,.95)', borderColor:'rgba(240,188,82,.35)', borderWidth:1, padding:12,
           titleFont:{family:"'JetBrains Mono', monospace"}, callbacks:{label:c=>' '+c.dataset.label+': '+fmt(c.raw)}}},
       scales:{
         x:{ grid:{display:false} },
@@ -1136,11 +1267,11 @@ function renderCharts(A) {
     type:'doughnut',
     data:{ labels: entries.map(([n])=>n),
       datasets:[{ data: entries.map(([,v])=>v.bookings),
-        backgroundColor:['#EDB84D','#3BE0A0','#56E1FF','#9B85FF','#F0B44E','#FF6E61'],
-        borderColor:'#0B1120', borderWidth:3, hoverOffset:8 }]},
+        backgroundColor:['#F0BC52','#3CE4A4','#5BE3FF','#A18BFF','#F2B650','#FF6F62'],
+        borderColor:'#0A0F1E', borderWidth:3, hoverOffset:8 }]},
     options:{ maintainAspectRatio:false, cutout:'68%',
       plugins:{ legend:{position:'bottom', labels:{usePointStyle:true, pointStyle:'circle', boxWidth:7, padding:14}},
-        tooltip:{ backgroundColor:'rgba(11,17,32,.95)', borderColor:'rgba(237,184,77,.35)', borderWidth:1, padding:12 } } }
+        tooltip:{ backgroundColor:'rgba(11,17,32,.95)', borderColor:'rgba(240,188,82,.35)', borderWidth:1, padding:12 } } }
   });
 }
 
@@ -1201,19 +1332,19 @@ function renderForecast(A) {
   killChart('fc');
   const fctx = $('chForecast').getContext('2d');
   const gFc = fctx.createLinearGradient(0,0,0,320);
-  gFc.addColorStop(0,'rgba(237,184,77,.55)'); gFc.addColorStop(1,'rgba(237,184,77,.04)');
+  gFc.addColorStop(0,'rgba(240,188,82,.55)'); gFc.addColorStop(1,'rgba(240,188,82,.04)');
   charts.fc = new Chart($('chForecast'), {
     data:{ labels, datasets:[
       { type:'bar', label:'Actual fee income', data:[...actual, ...Array(labels.length-actual.length).fill(null)],
-        backgroundColor:gFc, borderColor:'rgba(237,184,77,.8)', borderWidth:{top:1.5,left:0,right:0,bottom:0}, borderRadius:6 },
-      { type:'line', label:'Projection', data:fcLine, borderColor:'#3BE0A0', borderDash:[7,6], tension:.25,
-        pointRadius:3.5, pointHoverRadius:6, borderWidth:2, backgroundColor:'#3BE0A0' },
-      { type:'line', label:'Band (high)', data:bandHi, borderColor:'rgba(59,224,160,0)', backgroundColor:'rgba(59,224,160,.09)', fill:'+1', pointRadius:0 },
-      { type:'line', label:'Band (low)', data:bandLo, borderColor:'rgba(59,224,160,0)', pointRadius:0 }
+        backgroundColor:gFc, borderColor:'rgba(240,188,82,.8)', borderWidth:{top:1.5,left:0,right:0,bottom:0}, borderRadius:6 },
+      { type:'line', label:'Projection', data:fcLine, borderColor:'#3CE4A4', borderDash:[7,6], tension:.25,
+        pointRadius:3.5, pointHoverRadius:6, borderWidth:2, backgroundColor:'#3CE4A4' },
+      { type:'line', label:'Band (high)', data:bandHi, borderColor:'rgba(60,228,164,0)', backgroundColor:'rgba(60,228,164,.09)', fill:'+1', pointRadius:0 },
+      { type:'line', label:'Band (low)', data:bandLo, borderColor:'rgba(60,228,164,0)', pointRadius:0 }
     ]},
     options:{ maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
       plugins:{ legend:{position:'bottom', labels:{usePointStyle:true, pointStyle:'rectRounded', boxWidth:8, padding:16, filter:i=>!i.text.startsWith('Band')}},
-        tooltip:{ backgroundColor:'rgba(11,17,32,.95)', borderColor:'rgba(237,184,77,.35)', borderWidth:1, padding:12,
+        tooltip:{ backgroundColor:'rgba(11,17,32,.95)', borderColor:'rgba(240,188,82,.35)', borderWidth:1, padding:12,
           titleFont:{family:"'JetBrains Mono', monospace"}, callbacks:{label:c=>' '+c.dataset.label+': '+fmt(c.raw)} } },
       scales:{ x:{ grid:{display:false} },
         y:{ ticks:{ callback:v=>fmt(v), font:{family:"'JetBrains Mono', monospace", size:10} } } } }
@@ -1238,10 +1369,10 @@ function renderInsights(A) {
 
 function renderProjects() {
   $('tblProjects').innerHTML = `<tr><th>ID</th><th>Name</th><th>Location</th><th class="r">Units</th><th class="r">FY target (Cr)</th><th class="r">Target bookings</th><th class="r">Commission</th><th>Status</th></tr>` +
-    DB.projects.map(p=>`<tr><td class="num">${esc(p['Project ID'])}</td><td>${esc(p['Project Name'])}</td><td>${esc(p['Location'])}</td>
-      <td class="r num">${esc(p['Total Units'])}</td><td class="r num">${esc(p['FY Target Revenue (Cr)'])}</td>
-      <td class="r num">${esc(p['FY Target Bookings'])}</td><td class="r num">${(rateOf(p['Project Name'])*100).toFixed(1)}%</td>
-      <td><span class="pill ${p['Status']==='Active'?'good':'warn'}">${esc(p['Status'])}</span></td></tr>`).join('');
+    PJ().map(p=>`<tr><td class="num">${esc(p.id)}</td><td>${esc(p.name)}</td><td>${esc(p.location)}</td>
+      <td class="r num">${esc(p.units)}</td><td class="r num">${esc(p.targetRevCr)}</td>
+      <td class="r num">${esc(p.targetBk)}</td><td class="r num">${(rateOf(p.name)*100).toFixed(1)}%</td>
+      <td><span class="pill ${nrm(p.status)==='active'?'good':'warn'}">${esc(p.status)}</span></td></tr>`).join('');
 }
 
 /* ════════════════ WRITE ACTIONS ════════════════ */
