@@ -242,6 +242,7 @@ td.r,th.r{text-align:right}
     </div>
     <button class="navbtn active" data-view="pulse" data-label="Pulse"><span class="ic">◉</span>Pulse</button>
     <button class="navbtn" data-view="pnl" data-label="P&amp;L"><span class="ic">Σ</span>P&amp;L</button>
+    <button class="navbtn" data-view="budget" data-label="Budget"><span class="ic">◫</span>Budget</button>
     <button class="navbtn" data-view="targets" data-label="Targets"><span class="ic">⊕</span>Targets</button>
     <button class="navbtn" data-view="team" data-label="Team"><span class="ic">⬡</span>Team</button>
     <button class="navbtn" data-view="forecast" data-label="Forecast"><span class="ic">↗</span>Forecast</button>
@@ -307,6 +308,12 @@ td.r,th.r{text-align:right}
         </div>
       </div>
 
+      <div class="card section" id="tokenCard">
+        <h3>Token pipeline — expressions of interest awaiting allotment</h3>
+        <div style="overflow-x:auto"><table id="tblTokens"></table></div>
+        <p class="hint" style="margin-top:10px">Tokens are pipeline, not revenue — fee income is recognised only on booking. On allotment day, convert or cancel each token right here.</p>
+      </div>
+
       <div class="card section">
         <h3>Source performance — spend vs result</h3>
         <div style="overflow-x:auto"><table id="tblSource"></table></div>
@@ -367,6 +374,28 @@ td.r,th.r{text-align:right}
         <div class="formfoot">
           <button class="btn" id="saveEmployee">Add member</button>
           <span class="hint">Name must match the "Sales person" typed on bookings — that's how fee credit and incentives are matched.</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ BUDGET ═══ -->
+    <section class="view" id="view-budget">
+      <div class="grid kpis" id="budCards"></div>
+      <div class="card section">
+        <h3>Budget vs actual — sources · salary · incentives</h3>
+        <div style="overflow-x:auto"><table id="tblBudget"></table></div>
+        <p class="hint" style="margin-top:10px">"Suggested" is what the system estimates each head actually needs at your current run-rate: per-booking cost rules × booking velocity for variable heads, roster payroll for salaries, accrued incentives for the team. Type a budget and press Save — utilization and overrun projections update against it.</p>
+      </div>
+      <div class="grid two section">
+        <div class="card">
+          <h3>Per-booking cost rules — auto-accrue on every booking</h3>
+          <div style="overflow-x:auto"><table id="tblRules"></table></div>
+          <p class="hint" style="margin-top:10px">These costs are born the moment a booking (or token) happens, whether or not the payment has been made yet. The system accrues them automatically per booking.</p>
+        </div>
+        <div class="card">
+          <h3>Payables — accrued vs paid</h3>
+          <div style="overflow-x:auto"><table id="tblPayables"></table></div>
+          <p class="hint" style="margin-top:10px">Accrued = what bookings have earned (brokerage, bonuses, incentives). Paid = what's logged in Expenses under the matching head. Outstanding = the liability building up quietly.</p>
         </div>
       </div>
     </section>
@@ -462,7 +491,7 @@ td.r,th.r{text-align:right}
           <div class="field"><label>Agreement value (₹)</label><input type="number" id="sValue" placeholder="8500000"></div>
           <div class="field"><label>Amount received (₹)</label><input type="number" id="sReceived" placeholder="500000"></div>
           <div class="field"><label>Status</label><select id="sStatus">
-            <option>Booked</option><option>Agreement Done</option><option>Registered</option><option>Cancelled</option>
+            <option>Booked</option><option>Token</option><option>Agreement Done</option><option>Registered</option><option>Cancelled</option>
           </select></div>
         </div>
         <div class="formfoot">
@@ -668,7 +697,8 @@ function PJ() {
       status: pick(m, 'status') || 'Active',
       targetRevCr: toNum(pick(m, 'fy target revenue (cr)', 'fy target revenue', 'target revenue', 'target revenue cr', 'target (cr)')),
       targetBk: toNum(pick(m, 'fy target bookings', 'target bookings', 'booking target')),
-      commission: toNum(pick(m, 'commission %', 'commission', 'commission pct', 'fee %'))
+      commission: toNum(pick(m, 'commission %', 'commission', 'commission pct', 'fee %')),
+      phase: /token/i.test(String(pick(m, 'phase', 'stage') || '')) ? 'Token Phase' : 'Launched'
     };
   }).filter(p => p.name);
 }
@@ -680,6 +710,46 @@ function rateOf(projectName) {
   const p = PJ().find(x => nrm(x.name) === nrm(projectName));
   if (p && p.commission > 0) return p.commission / 100;
   return /aikyam/i.test(projectName || '') ? 0.0475 : 0.05;
+}
+
+/* ── canonical booking status ── */
+function canonStatus(s) {
+  const v = nrm(s);
+  if (/cancel|drop|lost/.test(v)) return 'Cancelled';
+  if (/token|eoi|interest/.test(v)) return 'Token';
+  if (/regist/.test(v)) return 'Registered';
+  if (/agree/.test(v)) return 'Agreement Done';
+  return 'Booked';
+}
+
+/* ── per-booking cost rules (from Cost_Rules sheet, with safe defaults) ── */
+function getRules() {
+  const r = { cpBrokeragePct: 2, cpTeamBonusPerBooking: 0, walkInPayoutPerBooking: 0, referralPayoutPct: 1, tokenBonusPerToken: 0 };
+  const map = { cpbrokeragepct:'cpBrokeragePct', cpteambonusperbooking:'cpTeamBonusPerBooking',
+    walkinpayoutperbooking:'walkInPayoutPerBooking', referralpayoutpct:'referralPayoutPct', tokenbonuspertoken:'tokenBonusPerToken' };
+  (DB.rules || []).forEach(row => {
+    const m = keymap(row);
+    const k = map[nkey(pick(m, 'rule', 'key') || '')];
+    if (k) r[k] = toNum(pick(m, 'value', 'amount'));
+  });
+  return r;
+}
+const RULE_META = [
+  ['cpBrokeragePct', 'CP brokerage', '% of agreement value on Channel Partner bookings', '%'],
+  ['cpTeamBonusPerBooking', 'CP team bonus', 'flat ₹ per Channel Partner booking', '₹'],
+  ['walkInPayoutPerBooking', 'Walk-in payout', 'flat ₹ per Direct Walk-in booking', '₹'],
+  ['referralPayoutPct', 'Referral reward', '% of agreement value on Referral bookings', '%'],
+  ['tokenBonusPerToken', 'Token bonus', 'flat ₹ per token collected (paid even if later cancelled)', '₹']
+];
+
+function normBudgets() {
+  const b = {};
+  (DB.budgets || []).forEach(row => {
+    const m = keymap(row);
+    const cat = String(pick(m, 'category', 'head') || '').trim();
+    if (cat) b[nkey(cat)] = { name: cat, amount: toNum(pick(m, 'monthly budget', 'budget', 'amount')) };
+  });
+  return b;
 }
 
 /* ── canonical source names: map real-world variants onto the five channels ── */
@@ -709,7 +779,7 @@ function normSales() {
       person: String(pick(m, 'sales person', 'salesperson', 'sales executive', 'executive', 'closed by', 'person') || '').trim(),
       value, fee: value * rateOf(project),
       received: toNum(pick(m, 'amount received', 'received', 'booking amount', 'token amount', 'token')),
-      status: String(pick(m, 'status', 'booking status') || 'Booked').trim()
+      status: canonStatus(pick(m, 'status', 'booking status') || 'Booked')
     };
   }).filter(s => s.date && s.project);
 }
@@ -789,8 +859,9 @@ function analyse() {
   // period slices (FY + month filter)
   const sales = allSales.filter(s => inRange(s.date));
   const exps  = allExps.filter(e => inRange(e.date));
-  const active = sales.filter(s => s.status !== 'Cancelled');
+  const active = sales.filter(s => s.status !== 'Cancelled' && s.status !== 'Token');
   const cancelled = sales.filter(s => s.status === 'Cancelled');
+  const tokenRows = sales.filter(s => s.status === 'Token');
 
   // monthly series: one FY, or the entire data range (+3 months headroom) in All-time
   let months;
@@ -816,6 +887,7 @@ function analyse() {
     const i = idx[monthKey(s.date)];
     if (i === undefined || !projFilter(s.project)) return;
     if (s.status === 'Cancelled') { series[i].cancel++; return; }
+    if (s.status === 'Token') return;
     series[i].revenue += s.value; series[i].fee += s.fee; series[i].bookings++;
   });
   allExps.forEach(e => {
@@ -828,7 +900,7 @@ function analyse() {
   if (F.project !== 'all') {
     series.forEach(m => m.expense = 0);
     const revByProjMonth = {};   // key|proj -> fee income (allocation weight)
-    allSales.filter(s=>s.status!=='Cancelled').forEach(s => {
+    allSales.filter(s=>s.status!=='Cancelled' && s.status!=='Token').forEach(s => {
       const k = monthKey(s.date); revByProjMonth[k] = revByProjMonth[k] || {};
       revByProjMonth[k][nrm(s.project)] = (revByProjMonth[k][nrm(s.project)]||0) + s.fee;
     });
@@ -899,7 +971,7 @@ function analyse() {
 
   // FY pacing (targets are FY-based; in All-time mode, pace against the current FY)
   const pfy = F.fy === 'all' ? fyOf(now) : F.fy;
-  const fySales = allSales.filter(s => fyOf(s.date)===pfy && s.status!=='Cancelled');
+  const fySales = allSales.filter(s => fyOf(s.date)===pfy && s.status!=='Cancelled' && s.status!=='Token');
   const fyStart = new Date(pfy,3,1), fyEnd = new Date(pfy+1,2,31);
   const elapsed = Math.min(1, Math.max(0.04,(Math.min(now,fyEnd)-fyStart)/(fyEnd-fyStart)));
   const pacing = PJ().map(p => {
@@ -910,7 +982,7 @@ function analyse() {
     const bk = mine.length;
     const tR = p.targetRevCr*1e7;
     const tB = p.targetBk;
-    return { name, rev, fee:pFee, bk, tR, tB,
+    return { name, rev, fee:pFee, bk, tR, tB, phase: p.phase,
       tFee: tR * rateOf(name),                 // fee-equivalent target
       pace: tR>0 ? (rev/tR)/elapsed : null,
       achievedPct: tR>0 ? rev/tR : null };
@@ -988,9 +1060,71 @@ function analyse() {
     breakEvenBk: feePerBk > varPerBk && fixedMonthly > 0 ? Math.ceil(fixedMonthly / (feePerBk - varPerBk)) : null,
     feePerHead: roster.length ? feeAll / roster.length : null };
 
+  /* ── TOKENS, PER-BOOKING ACCRUALS, PAYABLES & BUDGET (company-wide) ── */
+  const rules = getRules();
+  const tokensView = tokenRows.filter(s => projFilter(s.project));   // for the pipeline table
+  const tokenFeePotential = tokensView.reduce((a,s) => a + s.fee, 0);
+  const src = s => nrm(s.source);
+  const cpBk = active.filter(s => src(s) === 'channel partner');
+  const wiBk = active.filter(s => src(s) === 'direct walk-in');
+  const rfBk = active.filter(s => src(s) === 'referral');
+  const accr = {
+    brokerage: cpBk.reduce((a,s) => a + s.value * rules.cpBrokeragePct/100, 0),
+    cpBonus:   cpBk.length * rules.cpTeamBonusPerBooking,
+    walkin:    wiBk.length * rules.walkInPayoutPerBooking,
+    referral:  rfBk.reduce((a,s) => a + s.value * rules.referralPayoutPct/100, 0),
+    token:     tokenRows.length * rules.tokenBonusPerToken,
+    incentive: incentiveTotal
+  };
+  const payables = [
+    { name: 'CP brokerage',      accrued: accr.brokerage, paid: cat('CP Brokerage') },
+    { name: 'CP team bonus',     accrued: accr.cpBonus,   paid: cat('CP Bonus') },
+    { name: 'Walk-in payout',    accrued: accr.walkin,    paid: cat('Walk-in Payout') },
+    { name: 'Referral reward',   accrued: accr.referral,  paid: cat('Referral Payout') },
+    { name: 'Token bonus',       accrued: accr.token,     paid: cat('Token Bonus') },
+    { name: 'Team incentives',   accrued: accr.incentive, paid: cat('Team Incentive Payout') }
+  ].map(p => ({ ...p, outstanding: p.accrued - p.paid }));
+
+  // budget vs actual (monthly-avg basis) + system-suggested budgets
+  const budgets = normBudgets();
+  const perMo = v => v / mip;
+  const suggested = {
+    'Hoarding & Outdoor': perMo(cat('Hoarding & Outdoor')),
+    'Digital Marketing': perMo(cat('Digital Marketing')),
+    'CP Brokerage': perMo(accr.brokerage),
+    'CP Bonus': perMo(accr.cpBonus),
+    'Walk-in Payout': perMo(accr.walkin),
+    'Referral Payout': perMo(accr.referral),
+    'Token Bonus': perMo(accr.token),
+    'Events & Activations': perMo(cat('Events & Activations')),
+    'Collaterals & Print': perMo(cat('Collaterals & Print')),
+    'Other': perMo(cat('Other')),
+    'Payroll': rosterMode ? payroll / mip : perMo(loggedSalaries),
+    'Incentives': perMo(incentiveTotal)
+  };
+  const actualOf = {
+    'Payroll': (rosterMode ? payroll : loggedSalaries) / mip,
+    'Incentives': incentiveTotal / mip,
+    'CP Brokerage': Math.max(cat('CP Brokerage'), accr.brokerage) / mip,
+    'CP Bonus': Math.max(cat('CP Bonus'), accr.cpBonus) / mip,
+    'Walk-in Payout': Math.max(cat('Walk-in Payout'), accr.walkin) / mip,
+    'Referral Payout': Math.max(cat('Referral Payout'), accr.referral) / mip,
+    'Token Bonus': Math.max(cat('Token Bonus'), accr.token) / mip
+  };
+  const budgetRows = Object.keys(suggested).map(name => {
+    const bud = budgets[nkey(name)] ? budgets[nkey(name)].amount : 0;
+    const actual = actualOf[name] !== undefined ? actualOf[name] : perMo(cat(name));
+    return { name, budget: bud, actual, suggested: suggested[name],
+      util: bud > 0 ? actual / bud : null };
+  });
+  const budTotal = budgetRows.reduce((a,r) => a + r.budget, 0);
+  const budActual = budgetRows.reduce((a,r) => a + r.actual, 0);
+
   return { sales:perSales, cancelled, revenue, fee, bookings, received, expense,
     bySource, overheads, sites, series, pacing, elapsed, fc, activeMonths,
-    fyToDateFee, fcFyTotal, health, centralTotal, team, roster, pnl, mip };
+    fyToDateFee, fcFyTotal, health, centralTotal, team, roster, pnl, mip,
+    rules, tokensView, tokensAll: tokenRows, tokenFeePotential, accr, payables,
+    budgetRows, budTotal, budActual };
 }
 
 function forecast(ys, n) {
@@ -1051,6 +1185,12 @@ function buildInsights(A) {
 
   // pacing risks
   A.pacing.filter(p=>p.pace!=null && p.tR>0).forEach(p => {
+    if (p.phase === 'Token Phase') {
+      const tk = A.tokensAll.filter(t=>nrm(t.project)===nrm(p.name));
+      if (tk.length) out.push({ level:'good', title:`${p.name} (token phase): ${tk.length} EOIs collected`,
+        body:`${fmt(tk.reduce((a,s)=>a+s.value,0))} of interest banked, worth ${fmt(tk.reduce((a,s)=>a+s.fee,0))} in fee if all convert on allotment day. Revenue is deliberately zero until launch — pacing rules don't apply yet.` });
+      return;
+    }
     if (p.pace < 0.7) out.push({ level:'risk', title:`${p.name} is behind plan`,
       body:`Booked ${fmt(p.rev)} against a ${fmt(p.tR)} FY target — ${pct(p.achievedPct)} achieved with ${pct(A.elapsed)} of the year gone. At this pace it lands near ${fmt(p.rev/Math.max(.01,A.elapsed))} by March. It needs roughly ${fmt(Math.max(0,(p.tR-p.rev))/Math.max(1,Math.round(12*(1-A.elapsed))))} per remaining month to close the gap.` });
     else if (p.pace > 1.15) out.push({ level:'good', title:`${p.name} is ahead of plan`,
@@ -1136,6 +1276,19 @@ function buildInsights(A) {
         body:`Accrued incentives are ${pct(P.incentiveTotal/P.feeAll)} of fee income. Incentives should reward outperformance, not consume the mandate margin — consider slab-based payouts above target rather than flat % on every sale.` });
   }
 
+  // budget & payables lens
+  const overs = A.budgetRows.filter(r => r.util != null && r.util > 1.05);
+  if (overs.length)
+    out.push({ level:'warn', title:`${overs.length} budget head${overs.length>1?'s':''} running over`,
+      body:`${overs.slice(0,3).map(r=>r.name+' at '+pct(r.util)).join(', ')}${overs.length>3?' and more':''}. Either the budget was set too tight, or spend discipline slipped — the Budget page shows the suggested level for each head at current velocity.` });
+  const outst = A.payables.reduce((a,p)=>a+Math.max(0,p.outstanding),0);
+  if (outst > 0 && A.pnl.feeAll > 0 && outst > A.pnl.feeAll * 0.05)
+    out.push({ level:'warn', title:'Payables are building up quietly',
+      body:`${fmt(outst)} of brokerage, bonuses and incentives has been earned by bookings but not yet logged as paid — ${pct(outst/A.pnl.feeAll)} of fee income. This is money already spent in substance; budget cash flow for it before it lands all at once.` });
+  if (A.tokensAll.length >= 5)
+    out.push({ level:'good', title:`${A.tokensAll.length} tokens in the pipeline`,
+      body:`Worth ${fmt(A.tokensAll.reduce((a,s)=>a+s.fee,0))} in fee if all convert. Conversion is won in the gap between token and allotment — pricing clarity, loan pre-approval, and steady contact. Track conversion % per project once allotment days pass.` });
+
   if (!out.length) out.push({ level:'good', title:'Nothing on fire', body:'No rule tripped for this period. Add more data or widen the date range for richer signals.' });
   const rank = { risk:0, warn:1, good:2 };
   return out.sort((a,b)=>rank[a.level]-rank[b.level]);
@@ -1147,8 +1300,130 @@ function renderAll() {
   renderKPIs(A); renderHealth(A); renderCharts(A);
   renderSourceTable(A); renderSiteTable(A); renderOverheads(A);
   renderPnl(A); renderTeam(A);
+  renderTokens(A); renderBudget(A);
   renderTargets(A); renderSimulator(A);
   renderForecast(A); renderInsights(A); renderProjects();
+}
+
+/* ════════════════ TOKEN PIPELINE ════════════════ */
+function renderTokens(A) {
+  const T = A.tokensView;
+  $('tokenCard').style.display = '';
+  if (!T.length) {
+    $('tblTokens').innerHTML = '<tr><td class="empty">No open tokens right now. Log one via New booking with status “Token”.</td></tr>';
+    return;
+  }
+  $('tblTokens').innerHTML = `<tr><th>Token</th><th>Date</th><th>Project</th><th>Customer</th><th>Source</th><th>Sales person</th><th class="r">Value</th><th class="r">Fee if booked</th><th class="r" style="min-width:170px">Allotment action</th></tr>` +
+    T.map(t => `<tr><td class="num">${esc(t.id)}</td><td class="num">${t.date.toISOString().slice(0,10)}</td>
+      <td>${esc(t.project)}</td><td>${esc(t.sub && !t.person ? t.sub : '')}${esc((DB.sales.find(r=>String(r['Booking ID']||'').trim()===String(t.id).trim())||{})['Customer']||'')}</td>
+      <td>${esc(t.source)}</td><td>${esc(t.person)}</td>
+      <td class="r num">${fmt(t.value)}</td><td class="r num">${fmt(t.fee)}</td>
+      <td class="r"><button class="btn" style="padding:5px 12px;font-size:11.5px" onclick="tokenAction('${esc(t.id)}','Booked')">Book</button>
+      <button class="btn ghost" style="padding:5px 12px;font-size:11.5px;margin-left:6px;color:var(--ember);border-color:rgba(255,111,98,.4)" onclick="tokenAction('${esc(t.id)}','Cancelled')">Cancel</button></td></tr>`).join('');
+}
+async function tokenAction(bookingId, status) {
+  if (!bookingId) return toast('This token has no Booking ID — set the status in the sheet directly');
+  try {
+    if (CONFIG.API_URL) {
+      const r = await apiPost({ action:'updateSaleStatus', bookingId, status });
+      if (r.error) throw new Error(r.error);
+    } else {
+      const row = DB.sales.find(x => String(x['Booking ID']||'').trim() === String(bookingId).trim());
+      if (row) row['Status'] = status;
+    }
+    toast(bookingId + ' → ' + status);
+    if (CONFIG.API_URL) { const d = await apiGet('data'); if (!d.error) DB = d; }
+    renderAll();
+  } catch (e) { toast('Failed: ' + e.message); }
+}
+
+/* ════════════════ BUDGET ════════════════ */
+function renderBudget(A) {
+  const over = A.budgetRows.filter(r => r.util != null && r.util > 1).length;
+  const withB = A.budgetRows.filter(r => r.budget > 0);
+  const cards = [
+    ['Monthly budget (total)', A.budTotal, fmt, withB.length + ' heads budgeted', null, '#F0BC52'],
+    ['Actual / accrued per month', A.budActual, fmt, 'avg over ' + A.mip + ' month' + (A.mip>1?'s':''), null, '#5BE3FF'],
+    ['Utilization', A.budTotal>0?A.budActual/A.budTotal:null, v=>v==null||!isFinite(v)?'–':pct(v), A.budTotal>0?(A.budActual<=A.budTotal?'within budget':'over budget'):'set budgets below', null, A.budActual<=A.budTotal?'#3CE4A4':'#FF6F62', A.budActual<=A.budTotal?'up':'down'],
+    ['Heads over budget', over, v=>v==null?'–':Math.round(v)+'', 'of ' + withB.length + ' budgeted heads', null, over?'#FF6F62':'#3CE4A4'],
+    ['Projected FY spend', A.budActual*12, fmt, 'at current run-rate', null, '#A18BFF'],
+    ['Outstanding payables', A.payables.reduce((a,p)=>a+Math.max(0,p.outstanding),0), fmt, 'accrued, not yet paid', null, '#F2B650']
+  ];
+  $('budCards').innerHTML = cards.map(([l,,,d,,,cls]) =>
+    `<div class="card kpi"><div class="lbl">${l}</div><div class="val num">–</div><div class="delta ${cls||'flat'}">${d}</div></div>`).join('');
+  document.querySelectorAll('#budCards .val').forEach((el,i) => countUp(el, cards[i][1], cards[i][2]));
+
+  $('tblBudget').innerHTML = `<tr><th>Head</th><th class="r">Monthly budget</th><th class="r">Actual / accrued (mo)</th><th class="r">Utilization</th><th class="r">Suggested</th><th class="r" style="min-width:200px">Set budget</th></tr>` +
+    A.budgetRows.map((r,i) => {
+      const util = r.util==null ? '<span class="pill warn">no budget</span>'
+        : `<span class="pill ${r.util<=0.9?'good':r.util<=1.05?'warn':'risk'}">${pct(r.util)}</span>`;
+      return `<tr><td>${esc(r.name)}</td><td class="r num">${r.budget>0?fmt(r.budget):'–'}</td>
+        <td class="r num">${fmt(r.actual)}</td><td class="r">${util}</td>
+        <td class="r num" style="color:var(--cyan)">${fmt(r.suggested)}</td>
+        <td class="r"><input type="number" id="bud_${i}" value="${Math.round(r.budget)||''}" placeholder="${Math.round(r.suggested)}" style="width:110px;padding:6px 9px;font-size:12px">
+        <button class="btn ghost" style="padding:5px 11px;font-size:11.5px;margin-left:5px" onclick="saveBudget('${esc(r.name)}','bud_${i}')">Save</button></td></tr>`;
+    }).join('');
+
+  $('tblRules').innerHTML = `<tr><th>Rule</th><th class="r">Value</th><th>Applies to</th><th class="r" style="min-width:170px">Update</th></tr>` +
+    RULE_META.map(([key, label, desc, unit], i) =>
+      `<tr><td>${label}</td><td class="r num">${A.rules[key]}${unit==='%'?'%':''}</td>
+       <td style="color:var(--muted);font-size:12px">${desc}</td>
+       <td class="r"><input type="number" step="${unit==='%'?'0.05':'500'}" id="rule_${i}" value="${A.rules[key]}" style="width:90px;padding:6px 9px;font-size:12px">
+       <button class="btn ghost" style="padding:5px 11px;font-size:11.5px;margin-left:5px" onclick="saveRule('${key}','rule_${i}')">Save</button></td></tr>`).join('');
+
+  $('tblPayables').innerHTML = `<tr><th>Head</th><th class="r">Accrued</th><th class="r">Paid (logged)</th><th class="r">Outstanding</th></tr>` +
+    A.payables.map(p => `<tr><td>${esc(p.name)}</td><td class="r num">${fmt(p.accrued)}</td><td class="r num">${fmt(p.paid)}</td>
+      <td class="r num" style="color:${p.outstanding>1000?'var(--amber)':p.outstanding<-1000?'var(--cyan)':'var(--jade)'}">${fmt(p.outstanding)}</td></tr>`).join('')
+    + `<tr><td><b>Total</b></td><td class="r num">${fmt(A.payables.reduce((a,p)=>a+p.accrued,0))}</td>
+       <td class="r num">${fmt(A.payables.reduce((a,p)=>a+p.paid,0))}</td>
+       <td class="r num">${fmt(A.payables.reduce((a,p)=>a+p.outstanding,0))}</td></tr>`;
+}
+async function saveBudget(category, inputId) {
+  const v = Number($(inputId).value) || 0;
+  try {
+    if (CONFIG.API_URL) {
+      const r = await apiPost({ action:'setBudget', category, monthlyBudget: v });
+      if (r.error) throw new Error(r.error);
+      const d = await apiGet('data'); if (!d.error) DB = d;
+    } else {
+      DB.budgets = DB.budgets || [];
+      const row = DB.budgets.find(b => nkey(b['Category']||'') === nkey(category));
+      if (row) row['Monthly Budget'] = v; else DB.budgets.push({ 'Category':category, 'Monthly Budget':v });
+    }
+    toast('Budget saved: ' + category + ' → ' + fmt(v));
+    renderAll();
+  } catch (e) { toast('Failed: ' + e.message); }
+}
+async function saveRule(rule, inputId) {
+  const v = Number($(inputId).value) || 0;
+  try {
+    if (CONFIG.API_URL) {
+      const r = await apiPost({ action:'setRule', rule, value: v });
+      if (r.error) throw new Error(r.error);
+      const d = await apiGet('data'); if (!d.error) DB = d;
+    } else {
+      DB.rules = DB.rules || [];
+      const row = DB.rules.find(x => nkey(x['Rule']||'') === nkey(rule));
+      if (row) row['Value'] = v; else DB.rules.push({ 'Rule':rule, 'Value':v });
+    }
+    toast('Rule updated');
+    renderAll();
+  } catch (e) { toast('Failed: ' + e.message); }
+}
+async function togglePhase(name, current) {
+  const phase = current === 'Token Phase' ? 'Launched' : 'Token Phase';
+  try {
+    if (CONFIG.API_URL) {
+      const r = await apiPost({ action:'setProjectPhase', name, phase });
+      if (r.error) throw new Error(r.error);
+      const d = await apiGet('data'); if (!d.error) DB = d;
+    } else {
+      const row = DB.projects.find(p => nrm(p['Project Name']||p['Project']||'') === nrm(name));
+      if (row) row['Phase'] = phase;
+    }
+    toast(name + ' → ' + phase);
+    renderAll();
+  } catch (e) { toast('Failed: ' + e.message); }
 }
 
 /* ════════════════ TARGETS ════════════════ */
@@ -1214,7 +1489,8 @@ function renderTargets(A) {
       const gap = p.rev - exp;
       const mLeft = Math.max(1, Math.round(12 * (1 - A.elapsed)));
       const need = p.tR > 0 ? Math.max(0, p.tR - p.rev) / mLeft : null;
-      const verdict = p.pace==null?'<span class="pill warn">no target</span>'
+      const verdict = p.phase==='Token Phase'?'<span class="pill" style="background:rgba(91,227,255,.12);color:var(--cyan);border:1px solid rgba(91,227,255,.3)">token phase</span>'
+        : p.pace==null?'<span class="pill warn">no target</span>'
         : p.pace>=0.95?'<span class="pill good">on track</span>'
         : p.pace>=0.7?'<span class="pill warn">watch</span>'
         : '<span class="pill risk">behind</span>';
@@ -1436,14 +1712,14 @@ function renderKPIs(A) {
     + (F.month !== 'all' ? ' · ' + MONTHS[Number(F.month)] : '')
     + (F.project !== 'all' ? ' · ' + F.project : '');
   countUp($('heroFee'), A.fee, fmt);
-  const totalBk = normSales().filter(s => s.status !== 'Cancelled').length;
+  const totalBk = normSales().filter(s => s.status !== 'Cancelled' && s.status !== 'Token').length;
   $('heroChips').innerHTML = [
     `<span class="chip"><b>${fmt(A.revenue)}</b> sales value</span>`,
     `<span class="chip"><b>${A.bookings}</b>${A.bookings !== totalBk ? ' of ' + totalBk : ''} bookings${A.bookings !== totalBk ? ' in view' : ''}</span>`,
     `<span class="chip"><b>${fmt(A.expense)}</b> spend</span>`,
     `<span class="chip ${net>=0?'pos':'neg'}"><b>${fmt(net)}</b> net</span>`,
     `<span class="chip"><b>${fmt(A.received)}</b> collected</span>`
-  ].join('') + (A.bookings !== totalBk
+  ].join('') + (A.tokensView.length ? `<span class="chip" style="border-color:rgba(91,227,255,.4);color:var(--cyan)"><b>${A.tokensView.length}</b> tokens · ${fmt(A.tokenFeePotential)} fee if all book</span>` : '') + (A.bookings !== totalBk
     ? `<span class="chip" style="border-color:rgba(240,188,82,.4);color:var(--amber)">${totalBk - A.bookings} in other periods — switch to “All time”</span>` : '');
 
   const cards = [
@@ -1629,7 +1905,7 @@ function renderForecast(A) {
     A.pacing.map(p => {
       const w = p.achievedPct!=null? Math.min(100,p.achievedPct*100) : 0;
       const col = p.pace==null? 'var(--faint)' : p.pace>=0.95?'var(--jade)': p.pace>=0.7?'var(--amber)':'var(--ember)';
-      const verdict = p.pace==null?'no target': p.pace>=0.95?'on track': p.pace>=0.7?'watch':'behind';
+      const verdict = p.phase==='Token Phase'?'token phase': p.pace==null?'no target': p.pace>=0.95?'on track': p.pace>=0.7?'watch':'behind';
       return `<tr><td>${esc(p.name)}</td><td class="r num">${fmt(p.rev)}</td><td class="r num">${fmt(p.fee)}</td><td class="r num">${p.tR?fmt(p.tR):'–'}</td>
         <td class="r num">${p.achievedPct!=null?pct(p.achievedPct):'–'}</td>
         <td><div class="pace"><i style="width:${w}%;background:${col};color:${col}"></i></div></td>
@@ -1643,11 +1919,13 @@ function renderInsights(A) {
 }
 
 function renderProjects() {
-  $('tblProjects').innerHTML = `<tr><th>ID</th><th>Name</th><th>Location</th><th class="r">Units</th><th class="r">FY target (Cr)</th><th class="r">Target bookings</th><th class="r">Commission</th><th>Status</th></tr>` +
+  $('tblProjects').innerHTML = `<tr><th>ID</th><th>Name</th><th>Location</th><th class="r">Units</th><th class="r">FY target (Cr)</th><th class="r">Target bookings</th><th class="r">Commission</th><th>Status</th><th>Phase (tap to toggle)</th></tr>` +
     PJ().map(p=>`<tr><td class="num">${esc(p.id)}</td><td>${esc(p.name)}</td><td>${esc(p.location)}</td>
       <td class="r num">${esc(p.units)}</td><td class="r num">${esc(p.targetRevCr)}</td>
       <td class="r num">${esc(p.targetBk)}</td><td class="r num">${(rateOf(p.name)*100).toFixed(1)}%</td>
-      <td><span class="pill ${nrm(p.status)==='active'?'good':'warn'}">${esc(p.status)}</span></td></tr>`).join('');
+      <td><span class="pill ${nrm(p.status)==='active'?'good':'warn'}">${esc(p.status)}</span></td>
+      <td><button class="btn ghost" style="padding:5px 12px;font-size:11.5px;${p.phase==='Token Phase'?'color:var(--cyan);border-color:rgba(91,227,255,.4)':''}"
+        onclick="togglePhase('${esc(p.name)}','${p.phase}')">${p.phase==='Token Phase'?'◐ Token Phase':'● Launched'}</button></td></tr>`).join('');
 }
 
 /* ════════════════ WRITE ACTIONS ════════════════ */
@@ -1786,7 +2064,29 @@ function demoData() {
       if (rnd()<.4) addE(p['Project Name'],'Collaterals & Print', (0.2+rnd()*0.4)*1e5, 'Brochures, standees');
     });
   }
-  return { projects, sales, expenses, team, sources, expenseCategories, generatedAt: new Date().toISOString() };
+  // token-phase demo: a new project collecting EOIs
+  projects.push({ 'Project ID':'PRJ-005','Project Name':'Mangalam Ashiyana','Location':'PCMC','Total Units':240,'Status':'Active','FY Target Revenue (Cr)':70,'FY Target Bookings':90,'Commission %':5,'Phase':'Token Phase' });
+  const tnames = ['Meera Joshi','Rahul Patil','Kavita Shah','Suresh Rao','Anita Deshmukh','Prakash Naik'];
+  for (let i=0;i<6;i++) sales.push({ 'Booking ID':'BK-'+String(bk++).padStart(4,'0'),
+    'Date': '2026-08-0' + (2+i), 'Project':'Mangalam Ashiyana', 'Unit':'T-'+(101+i), 'Customer':tnames[i],
+    'Source': i%2?'Channel Partner':'Direct Walk-in', 'Sub-Source': i%2?'CP Firm '+(1+i):'', 'Sales Person':'Pooja',
+    'Agreement Value': 6800000+i*250000, 'Amount Received': 100000, 'Status':'Token' });
+  const rules = [
+    { 'Rule':'cpBrokeragePct','Value':2,'Description':'Brokerage % of AV on CP bookings' },
+    { 'Rule':'cpTeamBonusPerBooking','Value':5000,'Description':'CP team bonus per CP booking' },
+    { 'Rule':'walkInPayoutPerBooking','Value':2000,'Description':'Payout per walk-in booking' },
+    { 'Rule':'referralPayoutPct','Value':1,'Description':'Referral reward % of AV' },
+    { 'Rule':'tokenBonusPerToken','Value':2500,'Description':'Bonus per token collected' }
+  ];
+  const budgets = [
+    { 'Category':'Hoarding & Outdoor','Monthly Budget':400000 },{ 'Category':'Digital Marketing','Monthly Budget':550000 },
+    { 'Category':'CP Brokerage','Monthly Budget':1400000 },{ 'Category':'CP Bonus','Monthly Budget':60000 },
+    { 'Category':'Walk-in Payout','Monthly Budget':20000 },{ 'Category':'Referral Payout','Monthly Budget':250000 },
+    { 'Category':'Token Bonus','Monthly Budget':25000 },{ 'Category':'Events & Activations','Monthly Budget':150000 },
+    { 'Category':'Collaterals & Print','Monthly Budget':60000 },{ 'Category':'Other','Monthly Budget':50000 },
+    { 'Category':'Payroll','Monthly Budget':400000 },{ 'Category':'Incentives','Monthly Budget':180000 }
+  ];
+  return { projects, sales, expenses, team, budgets, rules, sources, expenseCategories, generatedAt: new Date().toISOString() };
 }
 
 loadData();
