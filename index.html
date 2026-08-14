@@ -382,7 +382,8 @@ td.r,th.r{text-align:right}
     <section class="view" id="view-budget">
       <div class="grid kpis" id="budCards"></div>
       <div class="card section">
-        <h3>Budget vs actual — sources · salary · incentives</h3>
+        <h3 style="justify-content:space-between"><span style="display:flex;align-items:center;gap:9px"><span></span>Budget vs actual — sources · salary · incentives</span>
+          <select id="budScope" style="font-size:12px;padding:6px 11px"><option value="ALL">Company-wide</option></select></h3>
         <div style="overflow-x:auto"><table id="tblBudget"></table></div>
         <p class="hint" style="margin-top:10px">"Suggested" is what the system estimates each head actually needs at your current run-rate: per-booking cost rules × booking velocity for variable heads, roster payroll for salaries, accrued incentives for the team. Type a budget and press Save — utilization and overrun projections update against it.</p>
       </div>
@@ -494,9 +495,16 @@ td.r,th.r{text-align:right}
             <option>Booked</option><option>Token</option><option>Agreement Done</option><option>Registered</option><option>Cancelled</option>
           </select></div>
         </div>
+        <h3 style="margin-top:24px">Payouts on this booking — auto-calculated, edit if this deal differs</h3>
+        <div class="formgrid">
+          <div class="field"><label>Sales exec incentive (₹)</label><input type="number" id="bkExecInc" placeholder="auto from roster rate"></div>
+          <div class="field" id="payBrk" style="display:none"><label>CP brokerage (₹)</label><input type="number" id="bkBrokerage" placeholder="auto from rule"></div>
+          <div class="field" id="payCpi" style="display:none"><label>CP team incentive (₹)</label><input type="number" id="bkCpInc" placeholder="auto from rule"></div>
+          <div class="field" id="payRef" style="display:none"><label>Referral payout (₹)</label><input type="number" id="bkReferral" placeholder="auto from rule"></div>
+        </div>
         <div class="formfoot">
           <button class="btn" id="saveSale">Save booking</button>
-          <span class="hint">Writes a row to Sales_Log in the Google Sheet.</span>
+          <span class="hint">Brokerage &amp; CP incentive appear only for Channel Partner deals; referral payout only for Referral-sourced. These amounts save on the booking row and drive payables — leave blank to use the standard rule, or type the negotiated amount for this specific deal.</span>
         </div>
       </div>
     </section>
@@ -673,6 +681,7 @@ const toNum = v => {
   const n = parseFloat(String(v).replace(/[\u20B9,\s]/g, ''));
   return isFinite(n) ? n : 0;
 };
+const optNum = v => (v === undefined || v === '' || v === null) ? null : toNum(v);
 const toDate = v => {
   if (v instanceof Date) return isNaN(v) ? null : v;
   if (v == null || v === '') return null;
@@ -747,9 +756,24 @@ function normBudgets() {
   (DB.budgets || []).forEach(row => {
     const m = keymap(row);
     const cat = String(pick(m, 'category', 'head') || '').trim();
-    if (cat) b[nkey(cat)] = { name: cat, amount: toNum(pick(m, 'monthly budget', 'budget', 'amount')) };
+    const scope = String(pick(m, 'scope', 'project') || 'ALL').trim() || 'ALL';
+    if (cat) b[nkey(scope) + '|' + nkey(cat)] = { name: cat, scope, amount: toNum(pick(m, 'monthly budget', 'budget', 'amount')) };
   });
   return b;
+}
+
+/* ── per-booking payouts: row-level value wins, else the standard rule ── */
+function bookingPayouts(s, rules, rosterByName) {
+  const v = nrm(s.source);
+  const cp = v === 'channel partner', rf = v === 'referral', wi = v === 'direct walk-in';
+  const emp = rosterByName[nrm(s.person)];
+  return {
+    brokerage: s.brokerage != null ? s.brokerage : (cp ? s.value * rules.cpBrokeragePct/100 : 0),
+    cpInc:     s.cpInc     != null ? s.cpInc     : (cp ? rules.cpTeamBonusPerBooking : 0),
+    referral:  s.refPay    != null ? s.refPay    : (rf ? s.value * rules.referralPayoutPct/100 : 0),
+    walkin:    wi ? rules.walkInPayoutPerBooking : 0,
+    exec:      s.execInc   != null ? s.execInc   : (emp ? s.value * emp.incPct/100 : 0)
+  };
 }
 
 /* ── canonical source names: map real-world variants onto the five channels ── */
@@ -779,7 +803,11 @@ function normSales() {
       person: String(pick(m, 'sales person', 'salesperson', 'sales executive', 'executive', 'closed by', 'person') || '').trim(),
       value, fee: value * rateOf(project),
       received: toNum(pick(m, 'amount received', 'received', 'booking amount', 'token amount', 'token')),
-      status: canonStatus(pick(m, 'status', 'booking status') || 'Booked')
+      status: canonStatus(pick(m, 'status', 'booking status') || 'Booked'),
+      brokerage: optNum(pick(m, 'cp brokerage', 'brokerage')),
+      cpInc:     optNum(pick(m, 'cp incentive')),
+      refPay:    optNum(pick(m, 'referral payout')),
+      execInc:   optNum(pick(m, 'exec incentive', 'executive incentive', 'sales incentive'))
     };
   }).filter(s => s.date && s.project);
 }
@@ -836,6 +864,9 @@ function initFilters() {
   $('sSource').innerHTML = (DB.sources||[]).map(s=>`<option>${esc(s)}</option>`).join('');
   $('eScope').innerHTML = '<option>CENTRAL</option>' + projNames.map(p=>`<option>${esc(p)}</option>`).join('');
   $('tSite').innerHTML = '<option>CENTRAL</option>' + projNames.map(p=>`<option>${esc(p)}</option>`).join('');
+  const budSel = $('budScope'), keep = budSel.value || 'ALL';
+  budSel.innerHTML = '<option value="ALL">Company-wide</option>' + projNames.map(p=>`<option ${p===keep?'selected':''}>${esc(p)}</option>`).join('');
+  if (keep === 'ALL') budSel.value = 'ALL';
   $('eCategory').innerHTML = (DB.expenseCategories||[]).map(c=>`<option>${esc(c.category)}</option>`).join('');
   $('sDate').valueAsDate = new Date(); $('eDate').valueAsDate = new Date();
 }
@@ -1009,17 +1040,21 @@ function analyse() {
   const monthsStarted = Math.min(F.fy==='all'?40:12, Math.max(1, series.filter(m => new Date(m.y, m.m, 1) <= now).length));
   const mip = F.month === 'all' ? monthsStarted : 1;   // salary months in period
   const roster = normTeam().filter(e => e.status !== 'Exited');
+  const rules = getRules();
+  const rosterByName = {};
+  roster.forEach(e => rosterByName[nrm(e.name)] = e);
 
   const byPerson = {};
   active.forEach(s => {
     const k = (s.person || '').trim().toLowerCase(); if (!k) return;
-    const o = byPerson[k] = byPerson[k] || { display: s.person.trim(), bookings:0, gdv:0, fee:0 };
+    const o = byPerson[k] = byPerson[k] || { display: s.person.trim(), bookings:0, gdv:0, fee:0, pay:0 };
     o.bookings++; o.gdv += s.value; o.fee += s.fee;
+    o.pay += bookingPayouts(s, rules, rosterByName).exec;   // row-level incentive wins, else roster rate
   });
 
   const team = roster.map(e => {
-    const st = byPerson[e.name.toLowerCase()] || { bookings:0, gdv:0, fee:0 };
-    const incentive = st.gdv * e.incPct / 100;
+    const st = byPerson[e.name.toLowerCase()] || { bookings:0, gdv:0, fee:0, pay:0 };
+    const incentive = st.pay;
     const cost = e.salary * mip + incentive;
     return { ...e, bookings: st.bookings, gdv: st.gdv, fee: st.fee, incentive, cost,
       roi: cost > 0 ? st.fee / cost : null,
@@ -1028,7 +1063,7 @@ function analyse() {
   Object.entries(byPerson).forEach(([k, st]) => {
     if (!roster.some(e => e.name.toLowerCase() === k))
       team.push({ name: st.display, role: '—', site: '—', salary: 0, incPct: 0, target: 0,
-        bookings: st.bookings, gdv: st.gdv, fee: st.fee, incentive: 0, cost: 0,
+        bookings: st.bookings, gdv: st.gdv, fee: st.fee, incentive: st.pay, cost: st.pay,
         roi: null, targetAch: null, onRoster: false });
   });
   team.sort((a,b) => b.fee - a.fee);
@@ -1060,22 +1095,16 @@ function analyse() {
     breakEvenBk: feePerBk > varPerBk && fixedMonthly > 0 ? Math.ceil(fixedMonthly / (feePerBk - varPerBk)) : null,
     feePerHead: roster.length ? feeAll / roster.length : null };
 
-  /* ── TOKENS, PER-BOOKING ACCRUALS, PAYABLES & BUDGET (company-wide) ── */
-  const rules = getRules();
+  /* ── TOKENS, PER-BOOKING ACCRUALS, PAYABLES & BUDGET ── */
   const tokensView = tokenRows.filter(s => projFilter(s.project));   // for the pipeline table
   const tokenFeePotential = tokensView.reduce((a,s) => a + s.fee, 0);
-  const src = s => nrm(s.source);
-  const cpBk = active.filter(s => src(s) === 'channel partner');
-  const wiBk = active.filter(s => src(s) === 'direct walk-in');
-  const rfBk = active.filter(s => src(s) === 'referral');
-  const accr = {
-    brokerage: cpBk.reduce((a,s) => a + s.value * rules.cpBrokeragePct/100, 0),
-    cpBonus:   cpBk.length * rules.cpTeamBonusPerBooking,
-    walkin:    wiBk.length * rules.walkInPayoutPerBooking,
-    referral:  rfBk.reduce((a,s) => a + s.value * rules.referralPayoutPct/100, 0),
-    token:     tokenRows.length * rules.tokenBonusPerToken,
-    incentive: incentiveTotal
-  };
+  const accr = active.reduce((a, s) => {
+    const p = bookingPayouts(s, rules, rosterByName);
+    a.brokerage += p.brokerage; a.cpBonus += p.cpInc; a.walkin += p.walkin; a.referral += p.referral;
+    return a;
+  }, { brokerage:0, cpBonus:0, walkin:0, referral:0 });
+  accr.token = tokenRows.length * rules.tokenBonusPerToken;
+  accr.incentive = incentiveTotal;
   const payables = [
     { name: 'CP brokerage',      accrued: accr.brokerage, paid: cat('CP Brokerage') },
     { name: 'CP team bonus',     accrued: accr.cpBonus,   paid: cat('CP Bonus') },
@@ -1085,38 +1114,9 @@ function analyse() {
     { name: 'Team incentives',   accrued: accr.incentive, paid: cat('Team Incentive Payout') }
   ].map(p => ({ ...p, outstanding: p.accrued - p.paid }));
 
-  // budget vs actual (monthly-avg basis) + system-suggested budgets
-  const budgets = normBudgets();
-  const perMo = v => v / mip;
-  const suggested = {
-    'Hoarding & Outdoor': perMo(cat('Hoarding & Outdoor')),
-    'Digital Marketing': perMo(cat('Digital Marketing')),
-    'CP Brokerage': perMo(accr.brokerage),
-    'CP Bonus': perMo(accr.cpBonus),
-    'Walk-in Payout': perMo(accr.walkin),
-    'Referral Payout': perMo(accr.referral),
-    'Token Bonus': perMo(accr.token),
-    'Events & Activations': perMo(cat('Events & Activations')),
-    'Collaterals & Print': perMo(cat('Collaterals & Print')),
-    'Other': perMo(cat('Other')),
-    'Payroll': rosterMode ? payroll / mip : perMo(loggedSalaries),
-    'Incentives': perMo(incentiveTotal)
-  };
-  const actualOf = {
-    'Payroll': (rosterMode ? payroll : loggedSalaries) / mip,
-    'Incentives': incentiveTotal / mip,
-    'CP Brokerage': Math.max(cat('CP Brokerage'), accr.brokerage) / mip,
-    'CP Bonus': Math.max(cat('CP Bonus'), accr.cpBonus) / mip,
-    'Walk-in Payout': Math.max(cat('Walk-in Payout'), accr.walkin) / mip,
-    'Referral Payout': Math.max(cat('Referral Payout'), accr.referral) / mip,
-    'Token Bonus': Math.max(cat('Token Bonus'), accr.token) / mip
-  };
-  const budgetRows = Object.keys(suggested).map(name => {
-    const bud = budgets[nkey(name)] ? budgets[nkey(name)].amount : 0;
-    const actual = actualOf[name] !== undefined ? actualOf[name] : perMo(cat(name));
-    return { name, budget: bud, actual, suggested: suggested[name],
-      util: bud > 0 ? actual / bud : null };
-  });
+  // budget context — renderBudget slices this per scope (company-wide or one project)
+  const budCtx = { exps, active, tokens: tokenRows, roster, rules, rosterByName, mip, rosterMode, loggedSalaries };
+  const budgetRows = budgetRowsFor(budCtx, 'ALL');
   const budTotal = budgetRows.reduce((a,r) => a + r.budget, 0);
   const budActual = budgetRows.reduce((a,r) => a + r.actual, 0);
 
@@ -1124,7 +1124,47 @@ function analyse() {
     bySource, overheads, sites, series, pacing, elapsed, fc, activeMonths,
     fyToDateFee, fcFyTotal, health, centralTotal, team, roster, pnl, mip,
     rules, tokensView, tokensAll: tokenRows, tokenFeePotential, accr, payables,
-    budgetRows, budTotal, budActual };
+    budCtx, budgetRows, budTotal, budActual };
+}
+
+/* ── scoped budget rows: scope = 'ALL' (company) or a project name ── */
+function budgetRowsFor(C, scope) {
+  const all = scope === 'ALL';
+  const ex = C.exps.filter(e => all ? true : nrm(e.scope) === nrm(scope));   // direct spend only for a project
+  const catAmt = {}; ex.forEach(e => catAmt[nkey(e.category)] = (catAmt[nkey(e.category)] || 0) + e.amount);
+  const cat = n => catAmt[nkey(n)] || 0;
+  const bks = C.active.filter(s => all ? true : nrm(s.project) === nrm(scope));
+  const toks = C.tokens.filter(s => all ? true : nrm(s.project) === nrm(scope));
+  const pay = bks.reduce((a, s) => {
+    const p = bookingPayouts(s, C.rules, C.rosterByName);
+    a.brokerage += p.brokerage; a.cpBonus += p.cpInc; a.walkin += p.walkin; a.referral += p.referral; a.exec += p.exec;
+    return a;
+  }, { brokerage:0, cpBonus:0, walkin:0, referral:0, exec:0 });
+  const tokenAcc = toks.length * C.rules.tokenBonusPerToken;
+  const scopeRoster = C.roster.filter(e => all ? true : nrm(e.site) === nrm(scope));
+  const payrollScoped = scopeRoster.reduce((a,e) => a + e.salary * C.mip, 0);
+  const payrollBase = all ? (C.rosterMode ? payrollScoped : C.loggedSalaries) : payrollScoped;
+  const perMo = v => v / C.mip;
+  const budgets = normBudgets();
+  const bud = name => { const b = budgets[nkey(scope) + '|' + nkey(name)]; return b ? b.amount : 0; };
+  const heads = [
+    ['Hoarding & Outdoor',   perMo(cat('Hoarding & Outdoor')),                       perMo(cat('Hoarding & Outdoor'))],
+    ['Digital Marketing',    perMo(cat('Digital Marketing')),                        perMo(cat('Digital Marketing'))],
+    ['CP Brokerage',         perMo(Math.max(cat('CP Brokerage'), pay.brokerage)),    perMo(pay.brokerage)],
+    ['CP Bonus',             perMo(Math.max(cat('CP Bonus'), pay.cpBonus)),          perMo(pay.cpBonus)],
+    ['Walk-in Payout',       perMo(Math.max(cat('Walk-in Payout'), pay.walkin)),     perMo(pay.walkin)],
+    ['Referral Payout',      perMo(Math.max(cat('Referral Payout'), pay.referral)),  perMo(pay.referral)],
+    ['Token Bonus',          perMo(Math.max(cat('Token Bonus'), tokenAcc)),          perMo(tokenAcc)],
+    ['Events & Activations', perMo(cat('Events & Activations')),                     perMo(cat('Events & Activations'))],
+    ['Collaterals & Print',  perMo(cat('Collaterals & Print')),                      perMo(cat('Collaterals & Print'))],
+    ['Other',                perMo(cat('Other')),                                    perMo(cat('Other'))],
+    ['Payroll',              perMo(payrollBase),                                     perMo(payrollBase)],
+    ['Incentives',           perMo(pay.exec),                                        perMo(pay.exec)]
+  ];
+  return heads.map(([name, actual, suggested]) => {
+    const b = bud(name);
+    return { name, budget: b, actual, suggested, util: b > 0 ? actual / b : null };
+  });
 }
 
 function forecast(ys, n) {
@@ -1339,29 +1379,34 @@ async function tokenAction(bookingId, status) {
 
 /* ════════════════ BUDGET ════════════════ */
 function renderBudget(A) {
-  const over = A.budgetRows.filter(r => r.util != null && r.util > 1).length;
-  const withB = A.budgetRows.filter(r => r.budget > 0);
+  window.__A = A;
+  const scope = ($('budScope') && $('budScope').value) || 'ALL';
+  const rows = scope === 'ALL' ? A.budgetRows : budgetRowsFor(A.budCtx, scope);
+  const over = rows.filter(r => r.util != null && r.util > 1).length;
+  const withB = rows.filter(r => r.budget > 0);
+  const budTotal = rows.reduce((a,r)=>a+r.budget,0), budActual = rows.reduce((a,r)=>a+r.actual,0);
+  const scopeLbl = scope === 'ALL' ? 'company-wide' : scope;
   const cards = [
-    ['Monthly budget (total)', A.budTotal, fmt, withB.length + ' heads budgeted', null, '#F0BC52'],
-    ['Actual / accrued per month', A.budActual, fmt, 'avg over ' + A.mip + ' month' + (A.mip>1?'s':''), null, '#5BE3FF'],
-    ['Utilization', A.budTotal>0?A.budActual/A.budTotal:null, v=>v==null||!isFinite(v)?'–':pct(v), A.budTotal>0?(A.budActual<=A.budTotal?'within budget':'over budget'):'set budgets below', null, A.budActual<=A.budTotal?'#3CE4A4':'#FF6F62', A.budActual<=A.budTotal?'up':'down'],
+    ['Monthly budget (total)', budTotal, fmt, withB.length + ' heads budgeted · ' + scopeLbl, null, '#F0BC52'],
+    ['Actual / accrued per month', budActual, fmt, 'avg over ' + A.mip + ' month' + (A.mip>1?'s':'') + ' · ' + scopeLbl, null, '#5BE3FF'],
+    ['Utilization', budTotal>0?budActual/budTotal:null, v=>v==null||!isFinite(v)?'–':pct(v), budTotal>0?(budActual<=budTotal?'within budget':'over budget'):'set budgets below', null, budActual<=budTotal?'#3CE4A4':'#FF6F62', budActual<=budTotal?'up':'down'],
     ['Heads over budget', over, v=>v==null?'–':Math.round(v)+'', 'of ' + withB.length + ' budgeted heads', null, over?'#FF6F62':'#3CE4A4'],
-    ['Projected FY spend', A.budActual*12, fmt, 'at current run-rate', null, '#A18BFF'],
-    ['Outstanding payables', A.payables.reduce((a,p)=>a+Math.max(0,p.outstanding),0), fmt, 'accrued, not yet paid', null, '#F2B650']
+    ['Projected FY spend', budActual*12, fmt, 'at current run-rate · ' + scopeLbl, null, '#A18BFF'],
+    ['Outstanding payables', A.payables.reduce((a,p)=>a+Math.max(0,p.outstanding),0), fmt, 'company-wide, accrued not yet paid', null, '#F2B650']
   ];
   $('budCards').innerHTML = cards.map(([l,,,d,,,cls]) =>
     `<div class="card kpi"><div class="lbl">${l}</div><div class="val num">–</div><div class="delta ${cls||'flat'}">${d}</div></div>`).join('');
   document.querySelectorAll('#budCards .val').forEach((el,i) => countUp(el, cards[i][1], cards[i][2]));
 
   $('tblBudget').innerHTML = `<tr><th>Head</th><th class="r">Monthly budget</th><th class="r">Actual / accrued (mo)</th><th class="r">Utilization</th><th class="r">Suggested</th><th class="r" style="min-width:200px">Set budget</th></tr>` +
-    A.budgetRows.map((r,i) => {
+    rows.map((r,i) => {
       const util = r.util==null ? '<span class="pill warn">no budget</span>'
         : `<span class="pill ${r.util<=0.9?'good':r.util<=1.05?'warn':'risk'}">${pct(r.util)}</span>`;
       return `<tr><td>${esc(r.name)}</td><td class="r num">${r.budget>0?fmt(r.budget):'–'}</td>
         <td class="r num">${fmt(r.actual)}</td><td class="r">${util}</td>
         <td class="r num" style="color:var(--cyan)">${fmt(r.suggested)}</td>
         <td class="r"><input type="number" id="bud_${i}" value="${Math.round(r.budget)||''}" placeholder="${Math.round(r.suggested)}" style="width:110px;padding:6px 9px;font-size:12px">
-        <button class="btn ghost" style="padding:5px 11px;font-size:11.5px;margin-left:5px" onclick="saveBudget('${esc(r.name)}','bud_${i}')">Save</button></td></tr>`;
+        <button class="btn ghost" style="padding:5px 11px;font-size:11.5px;margin-left:5px" onclick="saveBudget('${esc(r.name)}','bud_${i}','${esc(scope)}')">Save</button></td></tr>`;
     }).join('');
 
   $('tblRules').innerHTML = `<tr><th>Rule</th><th class="r">Value</th><th>Applies to</th><th class="r" style="min-width:170px">Update</th></tr>` +
@@ -1378,19 +1423,20 @@ function renderBudget(A) {
        <td class="r num">${fmt(A.payables.reduce((a,p)=>a+p.paid,0))}</td>
        <td class="r num">${fmt(A.payables.reduce((a,p)=>a+p.outstanding,0))}</td></tr>`;
 }
-async function saveBudget(category, inputId) {
+async function saveBudget(category, inputId, scope) {
   const v = Number($(inputId).value) || 0;
+  scope = scope || 'ALL';
   try {
     if (CONFIG.API_URL) {
-      const r = await apiPost({ action:'setBudget', category, monthlyBudget: v });
+      const r = await apiPost({ action:'setBudget', category, scope, monthlyBudget: v });
       if (r.error) throw new Error(r.error);
       const d = await apiGet('data'); if (!d.error) DB = d;
     } else {
       DB.budgets = DB.budgets || [];
-      const row = DB.budgets.find(b => nkey(b['Category']||'') === nkey(category));
-      if (row) row['Monthly Budget'] = v; else DB.budgets.push({ 'Category':category, 'Monthly Budget':v });
+      const row = DB.budgets.find(b => nkey(b['Category']||'') === nkey(category) && nkey(b['Scope']||'ALL') === nkey(scope));
+      if (row) row['Monthly Budget'] = v; else DB.budgets.push({ 'Category':category, 'Scope':scope, 'Monthly Budget':v });
     }
-    toast('Budget saved: ' + category + ' → ' + fmt(v));
+    toast('Budget saved: ' + category + ' (' + (scope==='ALL'?'company':scope) + ') → ' + fmt(v));
     renderAll();
   } catch (e) { toast('Failed: ' + e.message); }
 }
@@ -1945,12 +1991,19 @@ async function submit(btn, payload, localApply) {
 }
 
 $('saveSale').onclick = function() {
+  const srcSel = canonSource($('sSource').value);
+  const isCP = srcSel === 'Channel Partner', isRef = srcSel === 'Referral';
   const p = { action:'addSale', date:$('sDate').value, project:$('sProject').value, unit:$('sUnit').value,
     customer:$('sCustomer').value, source:$('sSource').value, subSource:$('sSub').value,
-    salesPerson:$('sPerson').value, agreementValue:$('sValue').value, amountReceived:$('sReceived').value, status:$('sStatus').value };
+    salesPerson:$('sPerson').value, agreementValue:$('sValue').value, amountReceived:$('sReceived').value, status:$('sStatus').value,
+    execIncentive: $('bkExecInc').value,
+    brokerage: isCP ? $('bkBrokerage').value : '',
+    cpIncentive: isCP ? $('bkCpInc').value : '',
+    referralPayout: isRef ? $('bkReferral').value : '' };
   if (!p.date || !p.project || !p.agreementValue) return toast('Date, project and agreement value are required');
   submit(this, p, () => DB.sales.push({ 'Booking ID':'BK-DEMO','Date':p.date,'Project':p.project,'Unit':p.unit,'Customer':p.customer,
-    'Source':p.source,'Sub-Source':p.subSource,'Sales Person':p.salesPerson,'Agreement Value':p.agreementValue,'Amount Received':p.amountReceived,'Status':p.status }));
+    'Source':p.source,'Sub-Source':p.subSource,'Sales Person':p.salesPerson,'Agreement Value':p.agreementValue,'Amount Received':p.amountReceived,'Status':p.status,
+    'CP Brokerage':p.brokerage,'CP Incentive':p.cpIncentive,'Referral Payout':p.referralPayout,'Exec Incentive':p.execIncentive }));
 };
 
 $('saveExpense').onclick = function() {
@@ -1997,6 +2050,27 @@ $('refreshBtn').onclick = loadData;
   if (r) r.oninput = () => { n.value = r.value; runSim(); };
 });
 $('simReset').onclick = resetSim;
+$('budScope').onchange = () => { if (window.__A) renderBudget(window.__A); };
+
+// booking form: payout fields react to source / value / salesperson
+function refreshPayoutFields() {
+  const srcSel = canonSource($('sSource').value);
+  const av = Number($('sValue').value) || 0;
+  const rules = getRules();
+  const isCP = srcSel === 'Channel Partner', isRef = srcSel === 'Referral';
+  $('payBrk').style.display = isCP ? '' : 'none';
+  $('payCpi').style.display = isCP ? '' : 'none';
+  $('payRef').style.display = isRef ? '' : 'none';
+  const emp = normTeam().find(e => nrm(e.name) === nrm($('sPerson').value));
+  $('bkExecInc').placeholder = emp && av ? String(Math.round(av * emp.incPct/100)) : 'auto from roster rate';
+  $('bkBrokerage').placeholder = isCP && av ? String(Math.round(av * rules.cpBrokeragePct/100)) : 'auto from rule';
+  $('bkCpInc').placeholder = isCP ? String(rules.cpTeamBonusPerBooking) : 'auto from rule';
+  $('bkReferral').placeholder = isRef && av ? String(Math.round(av * rules.referralPayoutPct/100)) : 'auto from rule';
+}
+['sSource','sValue','sPerson'].forEach(id => {
+  $(id).addEventListener('input', refreshPayoutFields);
+  $(id).addEventListener('change', refreshPayoutFields);
+});
 
 /* ════════════════ DEMO DATA ════════════════ */
 function demoData() {
