@@ -825,6 +825,7 @@ function normSales() {
       date: toDate(pick(m, 'date', 'booking date', 'sale date')),
       project,
       customer: String(pick(m, 'customer', 'customer name') || '').trim(),
+      unit: String(pick(m, 'unit', 'unit no', 'unit no.', 'unitno') || '').trim(),
       source: canonSource(pick(m, 'source', 'lead source', 'channel')),
       sub: pick(m, 'sub-source', 'sub source', 'cp name', 'campaign') || '',
       person: String(pick(m, 'sales person', 'salesperson', 'sales executive', 'executive', 'closed by', 'person') || '').trim(),
@@ -1461,8 +1462,8 @@ function renderBookingsList() {
   const payPill = p => p === 'Paid' ? 'good' : 'warn';
   const STATUS_OPTS = ['Booked','Agreement Done','Cancelled'];
   const thStyle = 'position:sticky;top:0;background:#0c1220;z-index:1';
-  tbl.innerHTML = `<tr><th style="${thStyle}">Booking</th><th style="${thStyle}">Date</th><th style="${thStyle}">Project</th><th style="${thStyle}">Customer</th><th style="${thStyle}">Sales person</th><th class="r" style="${thStyle}">Agreement value</th><th class="r" style="${thStyle}">Received</th><th style="${thStyle}">Payment</th><th style="${thStyle}">Status</th><th style="${thStyle}">Bill status</th><th class="r" style="min-width:210px;${thStyle}">Actions</th></tr>` +
-    rows.map(s => {
+  tbl.innerHTML = `<tr><th style="${thStyle}">#</th><th style="${thStyle}">Booking</th><th style="${thStyle}">Date</th><th style="${thStyle}">Project</th><th style="${thStyle}">Unit</th><th style="${thStyle}">Customer</th><th style="${thStyle}">Sales person</th><th class="r" style="${thStyle}">Agreement value</th><th class="r" style="${thStyle}">Received</th><th style="${thStyle}">Payment</th><th style="${thStyle}">Status</th><th style="${thStyle}">Bill status</th><th class="r" style="min-width:210px;${thStyle}">Actions</th></tr>` +
+    rows.map((s, i) => {
       const canRaise = (s.status === 'Agreement Done' || s.status === 'Registered') && s.billStatus !== 'Invoiced' && s.billStatus !== 'Received';
       const canReceive = s.billStatus === 'Invoiced';
       const canPrint = s.billStatus === 'Invoiced' || s.billStatus === 'Received';
@@ -1471,15 +1472,16 @@ function renderBookingsList() {
       // the dropdown only offers the 3 standard options going forward
       const opts = STATUS_OPTS.indexOf(s.status) === -1 ? [s.status, ...STATUS_OPTS] : STATUS_OPTS;
       return `<tr>
+        <td class="num">${i + 1}</td>
         <td class="num">${esc(s.id)}</td><td class="num">${s.date.toISOString().slice(0,10)}</td>
-        <td>${esc(s.project)}</td><td>${esc(s.customer)}</td><td>${esc(s.person)}</td>
+        <td>${esc(s.project)}</td><td class="num">${esc(s.unit)||'—'}</td><td>${esc(s.customer)}</td><td>${esc(s.person)}</td>
         <td class="r num">${fmt(s.value)}</td>
         <td class="r num">${fmt(s.received)}</td>
         <td><span class="pill ${payPill(pay)}">${pay}</span></td>
         <td><select style="padding:5px 8px;font-size:11.5px" data-prev="${esc(s.status)}" onchange="changeBookingStatus('${esc(s.id)}', this.value, this)">
           ${opts.map(st => `<option ${st===s.status?'selected':''}>${esc(st)}</option>`).join('')}
         </select></td>
-        <td>${s.billStatus ? `<span class="pill ${billPill(s.billStatus)}">${esc(s.billStatus)}</span>` : '<span class="hint">—</span>'}</td>
+        <td>${s.billStatus ? `<span class="pill ${billPill(s.billStatus)}">${esc(s.billStatus)}</span>` : '<span class="hint">Not raised</span>'}</td>
         <td class="r">
           ${canRaise ? `<button class="btn ghost" style="padding:5px 12px;font-size:11.5px" onclick="raiseBill('${esc(s.id)}')">Raise bill</button>` : ''}
           ${canReceive ? `<button class="btn ghost" style="padding:5px 12px;font-size:11.5px;margin-left:6px;color:var(--jade);border-color:rgba(60,228,164,.4)" onclick="markReceived('${esc(s.id)}')">Mark received</button>` : ''}
@@ -2204,13 +2206,33 @@ function renderInsights(A) {
 }
 
 function renderProjects() {
-  $('tblProjects').innerHTML = `<tr><th>ID</th><th>Name</th><th>Location</th><th class="r">Units</th><th class="r">FY target (Cr)</th><th class="r">Target bookings</th><th class="r">Commission</th><th>Status</th><th>Phase (tap to toggle)</th></tr>` +
+  $('tblProjects').innerHTML = `<tr><th>ID</th><th>Name</th><th>Location</th><th class="r">Units</th><th class="r">FY target (Cr)</th><th class="r">Target bookings</th><th class="r">Commission (tap to edit)</th><th>Status</th><th>Phase (tap to toggle)</th></tr>` +
     PJ().map(p=>`<tr><td class="num">${esc(p.id)}</td><td>${esc(p.name)}</td><td>${esc(p.location)}</td>
       <td class="r num">${esc(p.units)}</td><td class="r num">${esc(p.targetRevCr)}</td>
-      <td class="r num">${esc(p.targetBk)}</td><td class="r num">${(rateOf(p.name)*100).toFixed(1)}%</td>
+      <td class="r num">${esc(p.targetBk)}</td>
+      <td class="r"><button class="btn ghost" style="padding:5px 12px;font-size:11.5px" onclick="editCommission('${esc(p.name)}', ${rateOf(p.name)*100})">${(rateOf(p.name)*100).toFixed(2)}% ✎</button></td>
       <td><span class="pill ${nrm(p.status)==='active'?'good':'warn'}">${esc(p.status)}</span></td>
       <td><button class="btn ghost" style="padding:5px 12px;font-size:11.5px;${p.phase==='Token Phase'?'color:var(--cyan);border-color:rgba(91,227,255,.4)':''}"
         onclick="togglePhase('${esc(p.name)}','${p.phase}')">${p.phase==='Token Phase'?'◐ Token Phase':'● Launched'}</button></td></tr>`).join('');
+}
+
+async function editCommission(name, currentPct) {
+  const input = prompt(`Commission % for ${name} (currently ${currentPct}%) — this is the rate Realtech bills on every agreement value for this project:`, currentPct);
+  if (input === null) return;
+  const pct = Number(input);
+  if (!isFinite(pct) || pct < 0 || pct > 100) return toast('Enter a valid percentage between 0 and 100');
+  try {
+    if (CONFIG.API_URL) {
+      const r = await apiPost({ action:'setProjectCommission', name, commissionPct: pct });
+      if (r.error) throw new Error(r.error);
+      const d = await apiGet('data'); if (!d.error) DB = d;
+    } else {
+      const row = DB.projects.find(p => nrm(p['Project Name']||p['Project']||'') === nrm(name));
+      if (row) row['Commission %'] = pct;
+    }
+    toast(name + ' commission → ' + pct + '%');
+    renderAll();
+  } catch (e) { toast('Failed: ' + e.message); }
 }
 
 /* ════════════════ WRITE ACTIONS ════════════════ */
