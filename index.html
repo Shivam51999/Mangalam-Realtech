@@ -516,11 +516,13 @@ td.r,th.r{text-align:right}
         <div class="filters" style="margin-bottom:16px">
           <div class="field"><label>From</label><input type="date" id="bkFrom"></div>
           <div class="field"><label>To</label><input type="date" id="bkTo"></div>
+          <div class="field"><label>Project</label><select id="bkProjectFilter"><option value="all">All projects</option></select></div>
+          <div class="field"><label>Customer</label><input id="bkCustomerSearch" placeholder="Search by name…"></div>
           <div class="field"><label>Agreement status</label><select id="bkStatusFilter">
-            <option value="all">All</option><option>Booked</option><option>Token</option><option>Agreement Done</option><option>Registered</option><option>Cancelled</option>
+            <option value="all">All</option><option>Booked</option><option>Agreement Done</option><option>Cancelled</option>
           </select></div>
           <div class="field"><label>Payment status</label><select id="bkPaymentFilter">
-            <option value="all">All</option><option value="Pending">Pending</option><option value="Partial">Partial</option><option value="Full">Full</option>
+            <option value="all">All</option><option value="Paid">Paid</option><option value="Pending">Pending</option>
           </select></div>
           <button class="btn ghost" id="bkClearFilters" style="align-self:flex-end">Clear filters</button>
         </div>
@@ -528,7 +530,7 @@ td.r,th.r{text-align:right}
         <div style="max-height:460px;overflow-y:auto;overflow-x:auto;border:1px solid var(--line);border-radius:12px">
           <table id="tblBookings"></table>
         </div>
-        <p class="hint" style="margin-top:10px">Status is editable right here — change it to "Agreement Done" or "Registered" to unlock "Raise bill" on that row. Bill amount = agreement value × the project's commission rate (4.75% Aikyam, 5% others). "Mark received" appears once a bill has been raised. Every status change (including Cancelled) updates the live Sales_Log immediately. This list shows every booking matching the filters above — scroll the box to see more; the top nav's FY/month/project filters don't apply here.</p>
+        <p class="hint" style="margin-top:10px">Status dropdown offers Booked / Agreement Done / Cancelled — change it to "Agreement Done" to unlock "Raise bill" on that row. Bill amount = agreement value × the project's commission rate (4.75% Aikyam, 5% others). "Mark received" appears once a bill has been raised. Payment shows Paid once Amount Received meets Agreement Value, Pending otherwise. Every status change updates the live Sales_Log immediately. This list shows every booking matching the filters above — scroll the box to see more; the top nav's FY/month/project filters don't apply here.</p>
       </div>
     </section>
 
@@ -587,7 +589,7 @@ const CONFIG = {
 let DB = { projects: [], sales: [], expenses: [], sources: [], expenseCategories: [] };
 let charts = {};
 const F = { fy: null, month: 'all', project: 'all' };
-const BF = { from: null, to: null, status: 'all', payment: 'all' };
+const BF = { from: null, to: null, project: 'all', customer: '', status: 'all', payment: 'all' };
 const MONTHS = ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
 
 /* ── helpers ── */
@@ -901,6 +903,8 @@ function initFilters() {
   $('sPersonOther').style.display = perSel.value === '__other__' ? '' : 'none';
   $('eScope').innerHTML = '<option>CENTRAL</option>' + projNames.map(p=>`<option>${esc(p)}</option>`).join('');
   $('tSite').innerHTML = '<option>CENTRAL</option>' + projNames.map(p=>`<option>${esc(p)}</option>`).join('');
+  const bkProjSel = $('bkProjectFilter'), keepBkProj = bkProjSel.value || 'all';
+  bkProjSel.innerHTML = '<option value="all">All projects</option>' + projNames.map(p=>`<option ${p===keepBkProj?'selected':''}>${esc(p)}</option>`).join('');
   const budSel = $('budScope'), keep = budSel.value || 'ALL';
   budSel.innerHTML = '<option value="ALL">Company-wide</option>' + projNames.map(p=>`<option ${p===keep?'selected':''}>${esc(p)}</option>`).join('');
   if (keep === 'ALL') budSel.value = 'ALL';
@@ -1418,9 +1422,7 @@ async function tokenAction(bookingId, status) {
 /* ════════════════ ALL BOOKINGS — filter / cancel / bill / receive ════════════════ */
 function paymentStatusOf(s) {
   if (!s.value) return 'Pending';
-  if (s.received >= s.value) return 'Full';
-  if (s.received > 0) return 'Partial';
-  return 'Pending';
+  return s.received >= s.value ? 'Paid' : 'Pending';
 }
 
 function renderBookingsList() {
@@ -1428,9 +1430,12 @@ function renderBookingsList() {
   if (!tbl) return;
   const fromD = BF.from ? parseDate(BF.from) : null;
   const toD = BF.to ? parseDate(BF.to) : null;
+  const custQ = nrm(BF.customer);
   const rows = normSales()
     .filter(s => !fromD || s.date >= fromD)
     .filter(s => !toD || s.date <= toD)
+    .filter(s => BF.project === 'all' || nrm(s.project) === nrm(BF.project))
+    .filter(s => !custQ || nrm(s.customer).indexOf(custQ) !== -1)
     .filter(s => BF.status === 'all' || s.status === BF.status)
     .filter(s => BF.payment === 'all' || paymentStatusOf(s) === BF.payment)
     .sort((a,b) => b.date - a.date);
@@ -1453,8 +1458,8 @@ function renderBookingsList() {
 
   if (!rows.length) { tbl.innerHTML = '<tr><td class="empty">No bookings match these filters.</td></tr>'; return; }
   const billPill = b => b === 'Received' ? 'good' : b === 'Invoiced' ? 'warn' : '';
-  const payPill = p => p === 'Full' ? 'good' : p === 'Partial' ? 'warn' : 'risk';
-  const STATUS_OPTS = ['Booked','Token','Agreement Done','Registered','Cancelled'];
+  const payPill = p => p === 'Paid' ? 'good' : 'warn';
+  const STATUS_OPTS = ['Booked','Agreement Done','Cancelled'];
   const thStyle = 'position:sticky;top:0;background:#0c1220;z-index:1';
   tbl.innerHTML = `<tr><th style="${thStyle}">Booking</th><th style="${thStyle}">Date</th><th style="${thStyle}">Project</th><th style="${thStyle}">Customer</th><th style="${thStyle}">Sales person</th><th class="r" style="${thStyle}">Agreement value</th><th class="r" style="${thStyle}">Received</th><th style="${thStyle}">Payment</th><th style="${thStyle}">Status</th><th style="${thStyle}">Bill status</th><th class="r" style="min-width:210px;${thStyle}">Actions</th></tr>` +
     rows.map(s => {
@@ -1462,6 +1467,9 @@ function renderBookingsList() {
       const canReceive = s.billStatus === 'Invoiced';
       const canPrint = s.billStatus === 'Invoiced' || s.billStatus === 'Received';
       const pay = paymentStatusOf(s);
+      // legacy rows (Token / Registered) still need to display their true value even though
+      // the dropdown only offers the 3 standard options going forward
+      const opts = STATUS_OPTS.indexOf(s.status) === -1 ? [s.status, ...STATUS_OPTS] : STATUS_OPTS;
       return `<tr>
         <td class="num">${esc(s.id)}</td><td class="num">${s.date.toISOString().slice(0,10)}</td>
         <td>${esc(s.project)}</td><td>${esc(s.customer)}</td><td>${esc(s.person)}</td>
@@ -1469,7 +1477,7 @@ function renderBookingsList() {
         <td class="r num">${fmt(s.received)}</td>
         <td><span class="pill ${payPill(pay)}">${pay}</span></td>
         <td><select style="padding:5px 8px;font-size:11.5px" data-prev="${esc(s.status)}" onchange="changeBookingStatus('${esc(s.id)}', this.value, this)">
-          ${STATUS_OPTS.map(st => `<option ${st===s.status?'selected':''}>${st}</option>`).join('')}
+          ${opts.map(st => `<option ${st===s.status?'selected':''}>${esc(st)}</option>`).join('')}
         </select></td>
         <td>${s.billStatus ? `<span class="pill ${billPill(s.billStatus)}">${esc(s.billStatus)}</span>` : '<span class="hint">—</span>'}</td>
         <td class="r">
@@ -1480,18 +1488,24 @@ function renderBookingsList() {
     }).join('');
 }
 
-['bkFrom','bkTo','bkStatusFilter','bkPaymentFilter'].forEach(id => {
+['bkFrom','bkTo','bkProjectFilter','bkStatusFilter','bkPaymentFilter'].forEach(id => {
   $(id).addEventListener('change', () => {
     BF.from = $('bkFrom').value || null;
     BF.to = $('bkTo').value || null;
+    BF.project = $('bkProjectFilter').value;
     BF.status = $('bkStatusFilter').value;
     BF.payment = $('bkPaymentFilter').value;
     renderBookingsList();
   });
 });
+$('bkCustomerSearch').addEventListener('input', () => {
+  BF.customer = $('bkCustomerSearch').value;
+  renderBookingsList();
+});
 $('bkClearFilters').onclick = () => {
-  BF.from = null; BF.to = null; BF.status = 'all'; BF.payment = 'all';
-  $('bkFrom').value = ''; $('bkTo').value = ''; $('bkStatusFilter').value = 'all'; $('bkPaymentFilter').value = 'all';
+  BF.from = null; BF.to = null; BF.project = 'all'; BF.customer = ''; BF.status = 'all'; BF.payment = 'all';
+  $('bkFrom').value = ''; $('bkTo').value = ''; $('bkProjectFilter').value = 'all'; $('bkCustomerSearch').value = '';
+  $('bkStatusFilter').value = 'all'; $('bkPaymentFilter').value = 'all';
   renderBookingsList();
 };
 
