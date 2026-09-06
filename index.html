@@ -488,7 +488,10 @@ td.r,th.r{text-align:right}
           <div class="field"><label>Customer</label><input id="sCustomer" placeholder="Customer name"></div>
           <div class="field"><label>Source</label><select id="sSource"></select></div>
           <div class="field"><label>Sub-source</label><input id="sSub" placeholder="CP firm / campaign / referrer"></div>
-          <div class="field"><label>Sales person</label><input id="sPerson" placeholder="Name"></div>
+          <div class="field"><label>Sales person</label>
+            <select id="sPerson"><option value="">— Select —</option><option value="__other__">Other (type name)</option></select>
+            <input id="sPersonOther" placeholder="Type name" style="display:none;margin-top:6px">
+          </div>
           <div class="field"><label>Agreement value (₹)</label><input type="number" id="sValue" placeholder="8500000"></div>
           <div class="field"><label>Amount received (₹)</label><input type="number" id="sReceived" placeholder="500000"></div>
           <div class="field"><label>Status</label><select id="sStatus">
@@ -506,6 +509,12 @@ td.r,th.r{text-align:right}
           <button class="btn" id="saveSale">Save booking</button>
           <span class="hint">Brokerage &amp; CP incentive appear only for Channel Partner deals; referral payout only for Referral-sourced. These amounts save on the booking row and drive payables — leave blank to use the standard rule, or type the negotiated amount for this specific deal.</span>
         </div>
+      </div>
+
+      <div class="card section">
+        <h3>Recent bookings — cancel, raise commission bill, mark received</h3>
+        <div style="overflow-x:auto"><table id="tblBookings"></table></div>
+        <p class="hint" style="margin-top:10px">"Raise bill" appears once status is "Agreement Done" or "Registered" — bill amount is agreement value × the project's commission rate (4.75% Aikyam, 5% others). "Mark received" appears once a bill has been raised. Cancelling here updates the live Sales_Log immediately. Showing latest 80 for the filters selected above.</p>
       </div>
     </section>
 
@@ -798,6 +807,7 @@ function normSales() {
       id: pick(m, 'booking id', 'id') || '',
       date: toDate(pick(m, 'date', 'booking date', 'sale date')),
       project,
+      customer: String(pick(m, 'customer', 'customer name') || '').trim(),
       source: canonSource(pick(m, 'source', 'lead source', 'channel')),
       sub: pick(m, 'sub-source', 'sub source', 'cp name', 'campaign') || '',
       person: String(pick(m, 'sales person', 'salesperson', 'sales executive', 'executive', 'closed by', 'person') || '').trim(),
@@ -807,7 +817,12 @@ function normSales() {
       brokerage: optNum(pick(m, 'cp brokerage', 'brokerage')),
       cpInc:     optNum(pick(m, 'cp incentive')),
       refPay:    optNum(pick(m, 'referral payout')),
-      execInc:   optNum(pick(m, 'exec incentive', 'executive incentive', 'sales incentive'))
+      execInc:   optNum(pick(m, 'exec incentive', 'executive incentive', 'sales incentive')),
+      billStatus: String(pick(m, 'bill status', 'commission status') || '').trim(),
+      invoiceNo: String(pick(m, 'invoice no', 'invoice number') || '').trim(),
+      invoiceDate: pick(m, 'invoice date') || '',
+      invoiceAmt: toNum(pick(m, 'invoice amount')),
+      commReceivedDate: pick(m, 'commission received date') || ''
     };
   }).filter(s => s.date && s.project);
 }
@@ -862,6 +877,13 @@ function initFilters() {
   // entry form selects
   $('sProject').innerHTML = projNames.map(p=>`<option>${esc(p)}</option>`).join('');
   $('sSource').innerHTML = (DB.sources||[]).map(s=>`<option>${esc(s)}</option>`).join('');
+  const perSel = $('sPerson'), keepPerson = perSel.value;
+  const activeNames = normTeam().filter(e => nrm(e.status) !== 'inactive' && nrm(e.status) !== 'exited')
+    .map(e => e.name).sort((a,b) => a.localeCompare(b));
+  perSel.innerHTML = '<option value="">— Select —</option>' +
+    activeNames.map(n => `<option ${n===keepPerson?'selected':''}>${esc(n)}</option>`).join('') +
+    `<option value="__other__" ${keepPerson==='__other__'?'selected':''}>Other (type name)</option>`;
+  $('sPersonOther').style.display = perSel.value === '__other__' ? '' : 'none';
   $('eScope').innerHTML = '<option>CENTRAL</option>' + projNames.map(p=>`<option>${esc(p)}</option>`).join('');
   $('tSite').innerHTML = '<option>CENTRAL</option>' + projNames.map(p=>`<option>${esc(p)}</option>`).join('');
   const budSel = $('budScope'), keep = budSel.value || 'ALL';
@@ -1343,6 +1365,7 @@ function renderAll() {
   renderTokens(A); renderBudget(A);
   renderTargets(A); renderSimulator(A);
   renderForecast(A); renderInsights(A); renderProjects();
+  renderBookingsList();
 }
 
 /* ════════════════ TOKEN PIPELINE ════════════════ */
@@ -1375,6 +1398,134 @@ async function tokenAction(bookingId, status) {
     if (CONFIG.API_URL) { const d = await apiGet('data'); if (!d.error) DB = d; }
     renderAll();
   } catch (e) { toast('Failed: ' + e.message); }
+}
+
+/* ════════════════ RECENT BOOKINGS — cancel / bill / receive ════════════════ */
+function renderBookingsList() {
+  const tbl = $('tblBookings');
+  if (!tbl) return;
+  const rows = normSales()
+    .filter(s => s.status !== 'Token')
+    .filter(s => inRange(s.date))
+    .filter(s => F.project === 'all' || nrm(s.project) === nrm(F.project))
+    .sort((a,b) => b.date - a.date)
+    .slice(0, 80);
+  if (!rows.length) { tbl.innerHTML = '<tr><td class="empty">No bookings in this period.</td></tr>'; return; }
+  const statusPill = s => s === 'Cancelled' ? 'risk' : s === 'Registered' ? 'good' : 'warn';
+  const billPill = b => b === 'Received' ? 'good' : b === 'Invoiced' ? 'warn' : '';
+  tbl.innerHTML = `<tr><th>Booking</th><th>Date</th><th>Project</th><th>Customer</th><th>Sales person</th><th class="r">Agreement value</th><th>Status</th><th>Bill status</th><th class="r" style="min-width:250px">Actions</th></tr>` +
+    rows.map(s => {
+      const canCancel = s.status !== 'Cancelled';
+      const canRaise = (s.status === 'Agreement Done' || s.status === 'Registered') && s.billStatus !== 'Invoiced' && s.billStatus !== 'Received';
+      const canReceive = s.billStatus === 'Invoiced';
+      const canPrint = s.billStatus === 'Invoiced' || s.billStatus === 'Received';
+      return `<tr>
+        <td class="num">${esc(s.id)}</td><td class="num">${s.date.toISOString().slice(0,10)}</td>
+        <td>${esc(s.project)}</td><td>${esc(s.customer)}</td><td>${esc(s.person)}</td>
+        <td class="r num">${fmt(s.value)}</td>
+        <td><span class="pill ${statusPill(s.status)}">${esc(s.status)}</span></td>
+        <td>${s.billStatus ? `<span class="pill ${billPill(s.billStatus)}">${esc(s.billStatus)}</span>` : '<span class="hint">—</span>'}</td>
+        <td class="r">
+          ${canRaise ? `<button class="btn ghost" style="padding:5px 12px;font-size:11.5px" onclick="raiseBill('${esc(s.id)}')">Raise bill</button>` : ''}
+          ${canReceive ? `<button class="btn ghost" style="padding:5px 12px;font-size:11.5px;margin-left:6px;color:var(--jade);border-color:rgba(60,228,164,.4)" onclick="markReceived('${esc(s.id)}')">Mark received</button>` : ''}
+          ${canPrint ? `<button class="btn ghost" style="padding:5px 12px;font-size:11.5px;margin-left:6px" onclick="printInvoice('${esc(s.id)}')">Invoice</button>` : ''}
+          ${canCancel ? `<button class="btn ghost" style="padding:5px 12px;font-size:11.5px;margin-left:6px;color:var(--ember);border-color:rgba(255,111,98,.4)" onclick="cancelBooking('${esc(s.id)}')">Cancel</button>` : ''}
+        </td></tr>`;
+    }).join('');
+}
+
+async function cancelBooking(bookingId) {
+  if (!bookingId) return toast('This row has no Booking ID — cancel it in the sheet directly');
+  if (!confirm('Cancel booking ' + bookingId + '? This updates the live Sales_Log immediately and cannot be undone from here.')) return;
+  try {
+    if (CONFIG.API_URL) {
+      const r = await apiPost({ action:'updateSaleStatus', bookingId, status:'Cancelled' });
+      if (r.error) throw new Error(r.error);
+    } else {
+      const row = DB.sales.find(x => String(x['Booking ID']||'').trim() === String(bookingId).trim());
+      if (row) row['Status'] = 'Cancelled';
+    }
+    toast(bookingId + ' cancelled');
+    if (CONFIG.API_URL) { const d = await apiGet('data'); if (!d.error) DB = d; }
+    renderAll();
+  } catch (e) { toast('Failed: ' + e.message); }
+}
+
+async function raiseBill(bookingId) {
+  const s = normSales().find(x => x.id === bookingId);
+  if (!s) return;
+  const rate = rateOf(s.project);
+  const amount = Math.round(s.value * rate);
+  if (!confirm(`Raise commission bill for ${bookingId}?\n\n${s.customer||'(no customer name)'} · ${s.project}\nAgreement value: ${fmt(s.value)}\nCommission rate: ${(rate*100).toFixed(2)}%\nBill amount: ${fmt(amount)}`)) return;
+  try {
+    let invoiceNo = '';
+    if (CONFIG.API_URL) {
+      const r = await apiPost({ action:'raiseInvoice', bookingId, amount });
+      if (r.error) throw new Error(r.error);
+      invoiceNo = r.invoiceNo || '';
+      const d = await apiGet('data'); if (!d.error) DB = d;
+    } else {
+      const row = DB.sales.find(x => String(x['Booking ID']||'').trim() === String(bookingId).trim());
+      if (row) { row['Bill Status']='Invoiced'; row['Invoice No']='INV-DEMO'; row['Invoice Date']=new Date().toISOString().slice(0,10); row['Invoice Amount']=amount; }
+      invoiceNo = 'INV-DEMO (demo session)';
+    }
+    toast('Bill raised · ' + invoiceNo);
+    renderAll();
+  } catch (e) { toast('Failed: ' + e.message); }
+}
+
+async function markReceived(bookingId) {
+  if (!confirm('Mark commission received for ' + bookingId + '?')) return;
+  try {
+    if (CONFIG.API_URL) {
+      const r = await apiPost({ action:'markCommissionReceived', bookingId });
+      if (r.error) throw new Error(r.error);
+      const d = await apiGet('data'); if (!d.error) DB = d;
+    } else {
+      const row = DB.sales.find(x => String(x['Booking ID']||'').trim() === String(bookingId).trim());
+      if (row) { row['Bill Status']='Received'; row['Commission Received Date']=new Date().toISOString().slice(0,10); }
+    }
+    toast(bookingId + ' marked received');
+    renderAll();
+  } catch (e) { toast('Failed: ' + e.message); }
+}
+
+function printInvoice(bookingId) {
+  const s = normSales().find(x => x.id === bookingId);
+  if (!s) return;
+  const raw = (DB.sales || []).find(r => String(r['Booking ID']||'').trim() === String(bookingId).trim()) || {};
+  const invoiceNo = raw['Invoice No'] || '';
+  const invoiceDate = raw['Invoice Date'] || '';
+  const invoiceAmt = toNum(raw['Invoice Amount']) || Math.round(s.value * rateOf(s.project));
+  const rate = rateOf(s.project) * 100;
+  const w = window.open('', '_blank');
+  if (!w) return toast('Allow pop-ups to view the invoice');
+  w.document.write(`<!DOCTYPE html><html><head><title>${esc(invoiceNo || bookingId)}</title>
+<style>
+  body{font-family:Arial,Helvetica,sans-serif;padding:44px;color:#111}
+  h1{font-size:20px;margin-bottom:2px}
+  .muted{color:#666;font-size:12px}
+  .head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:16px}
+  table{width:100%;border-collapse:collapse;margin-top:26px}
+  td,th{padding:9px 10px;border-bottom:1px solid #ddd;text-align:left;font-size:13.5px}
+  .total td{font-weight:700;font-size:15px;border-top:2px solid #111}
+</style></head><body>
+  <div class="head">
+    <div><h1>Mangalam Realtech</h1><div class="muted">Sales, Marketing &amp; Collections vertical of Mangalam Group</div></div>
+    <div style="text-align:right"><div class="muted">Invoice no: ${esc(invoiceNo || '—')}</div><div class="muted">Invoice date: ${esc(invoiceDate || '—')}</div></div>
+  </div>
+  <table>
+    <tr><th>Booking ID</th><td>${esc(bookingId)}</td></tr>
+    <tr><th>Customer</th><td>${esc(s.customer||'')}</td></tr>
+    <tr><th>Project</th><td>${esc(s.project)}</td></tr>
+    <tr><th>Agreement value (consideration)</th><td>${fmt(s.value)}</td></tr>
+    <tr><th>Commission rate</th><td>${rate.toFixed(2)}%</td></tr>
+    <tr class="total"><th>Commission bill amount</th><td>${fmt(invoiceAmt)}</td></tr>
+  </table>
+  <p class="muted" style="margin-top:34px">Generated from Business Pulse. This is a working record for internal tracking — reissue on company letterhead / your accounting system for a statutory tax invoice.</p>
+  <script>window.print()<\/script>
+</body></html>`);
+  w.document.close();
 }
 
 /* ════════════════ BUDGET ════════════════ */
@@ -1993,14 +2144,16 @@ async function submit(btn, payload, localApply) {
 $('saveSale').onclick = function() {
   const srcSel = canonSource($('sSource').value);
   const isCP = srcSel === 'Channel Partner', isRef = srcSel === 'Referral';
+  const salesPerson = $('sPerson').value === '__other__' ? $('sPersonOther').value.trim() : $('sPerson').value;
   const p = { action:'addSale', date:$('sDate').value, project:$('sProject').value, unit:$('sUnit').value,
     customer:$('sCustomer').value, source:$('sSource').value, subSource:$('sSub').value,
-    salesPerson:$('sPerson').value, agreementValue:$('sValue').value, amountReceived:$('sReceived').value, status:$('sStatus').value,
+    salesPerson, agreementValue:$('sValue').value, amountReceived:$('sReceived').value, status:$('sStatus').value,
     execIncentive: $('bkExecInc').value,
     brokerage: isCP ? $('bkBrokerage').value : '',
     cpIncentive: isCP ? $('bkCpInc').value : '',
     referralPayout: isRef ? $('bkReferral').value : '' };
   if (!p.date || !p.project || !p.agreementValue) return toast('Date, project and agreement value are required');
+  if (!p.salesPerson) return toast('Pick a sales person (or choose "Other" and type the name)');
   submit(this, p, () => DB.sales.push({ 'Booking ID':'BK-DEMO','Date':p.date,'Project':p.project,'Unit':p.unit,'Customer':p.customer,
     'Source':p.source,'Sub-Source':p.subSource,'Sales Person':p.salesPerson,'Agreement Value':p.agreementValue,'Amount Received':p.amountReceived,'Status':p.status,
     'CP Brokerage':p.brokerage,'CP Incentive':p.cpIncentive,'Referral Payout':p.referralPayout,'Exec Incentive':p.execIncentive }));
@@ -2054,6 +2207,7 @@ $('budScope').onchange = () => { if (window.__A) renderBudget(window.__A); };
 
 // booking form: payout fields react to source / value / salesperson
 function refreshPayoutFields() {
+  $('sPersonOther').style.display = $('sPerson').value === '__other__' ? '' : 'none';
   const srcSel = canonSource($('sSource').value);
   const av = Number($('sValue').value) || 0;
   const rules = getRules();
@@ -2061,13 +2215,14 @@ function refreshPayoutFields() {
   $('payBrk').style.display = isCP ? '' : 'none';
   $('payCpi').style.display = isCP ? '' : 'none';
   $('payRef').style.display = isRef ? '' : 'none';
-  const emp = normTeam().find(e => nrm(e.name) === nrm($('sPerson').value));
+  const personName = $('sPerson').value === '__other__' ? $('sPersonOther').value : $('sPerson').value;
+  const emp = normTeam().find(e => nrm(e.name) === nrm(personName));
   $('bkExecInc').placeholder = emp && av ? String(Math.round(av * emp.incPct/100)) : 'auto from roster rate';
   $('bkBrokerage').placeholder = isCP && av ? String(Math.round(av * rules.cpBrokeragePct/100)) : 'auto from rule';
   $('bkCpInc').placeholder = isCP ? String(rules.cpTeamBonusPerBooking) : 'auto from rule';
   $('bkReferral').placeholder = isRef && av ? String(Math.round(av * rules.referralPayoutPct/100)) : 'auto from rule';
 }
-['sSource','sValue','sPerson'].forEach(id => {
+['sSource','sValue','sPerson','sPersonOther'].forEach(id => {
   $(id).addEventListener('input', refreshPayoutFields);
   $(id).addEventListener('change', refreshPayoutFields);
 });
