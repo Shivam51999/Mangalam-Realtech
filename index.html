@@ -512,9 +512,23 @@ td.r,th.r{text-align:right}
       </div>
 
       <div class="card section">
-        <h3>Recent bookings — cancel, raise commission bill, mark received</h3>
-        <div style="overflow-x:auto"><table id="tblBookings"></table></div>
-        <p class="hint" style="margin-top:10px">Status is editable right here — change it to "Agreement Done" or "Registered" to unlock "Raise bill" on that row. Bill amount = agreement value × the project's commission rate (4.75% Aikyam, 5% others). "Mark received" appears once a bill has been raised. Every status change (including Cancelled) updates the live Sales_Log immediately. Showing latest 80 for the filters selected above.</p>
+        <h3>All bookings — cancel, raise commission bill, mark received</h3>
+        <div class="filters" style="margin-bottom:16px">
+          <div class="field"><label>From</label><input type="date" id="bkFrom"></div>
+          <div class="field"><label>To</label><input type="date" id="bkTo"></div>
+          <div class="field"><label>Agreement status</label><select id="bkStatusFilter">
+            <option value="all">All</option><option>Booked</option><option>Token</option><option>Agreement Done</option><option>Registered</option><option>Cancelled</option>
+          </select></div>
+          <div class="field"><label>Payment status</label><select id="bkPaymentFilter">
+            <option value="all">All</option><option value="Pending">Pending</option><option value="Partial">Partial</option><option value="Full">Full</option>
+          </select></div>
+          <button class="btn ghost" id="bkClearFilters" style="align-self:flex-end">Clear filters</button>
+        </div>
+        <div class="grid kpis" id="bkSummary" style="margin-bottom:16px"></div>
+        <div style="max-height:460px;overflow-y:auto;overflow-x:auto;border:1px solid var(--line);border-radius:12px">
+          <table id="tblBookings"></table>
+        </div>
+        <p class="hint" style="margin-top:10px">Status is editable right here — change it to "Agreement Done" or "Registered" to unlock "Raise bill" on that row. Bill amount = agreement value × the project's commission rate (4.75% Aikyam, 5% others). "Mark received" appears once a bill has been raised. Every status change (including Cancelled) updates the live Sales_Log immediately. This list shows every booking matching the filters above — scroll the box to see more; the top nav's FY/month/project filters don't apply here.</p>
       </div>
     </section>
 
@@ -573,6 +587,7 @@ const CONFIG = {
 let DB = { projects: [], sales: [], expenses: [], sources: [], expenseCategories: [] };
 let charts = {};
 const F = { fy: null, month: 'all', project: 'all' };
+const BF = { from: null, to: null, status: 'all', payment: 'all' };
 const MONTHS = ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
 
 /* ── helpers ── */
@@ -1400,28 +1415,59 @@ async function tokenAction(bookingId, status) {
   } catch (e) { toast('Failed: ' + e.message); }
 }
 
-/* ════════════════ RECENT BOOKINGS — cancel / bill / receive ════════════════ */
+/* ════════════════ ALL BOOKINGS — filter / cancel / bill / receive ════════════════ */
+function paymentStatusOf(s) {
+  if (!s.value) return 'Pending';
+  if (s.received >= s.value) return 'Full';
+  if (s.received > 0) return 'Partial';
+  return 'Pending';
+}
+
 function renderBookingsList() {
   const tbl = $('tblBookings');
   if (!tbl) return;
+  const fromD = BF.from ? parseDate(BF.from) : null;
+  const toD = BF.to ? parseDate(BF.to) : null;
   const rows = normSales()
-    .filter(s => s.status !== 'Token')
-    .filter(s => inRange(s.date))
-    .filter(s => F.project === 'all' || nrm(s.project) === nrm(F.project))
-    .sort((a,b) => b.date - a.date)
-    .slice(0, 80);
-  if (!rows.length) { tbl.innerHTML = '<tr><td class="empty">No bookings in this period.</td></tr>'; return; }
+    .filter(s => !fromD || s.date >= fromD)
+    .filter(s => !toD || s.date <= toD)
+    .filter(s => BF.status === 'all' || s.status === BF.status)
+    .filter(s => BF.payment === 'all' || paymentStatusOf(s) === BF.payment)
+    .sort((a,b) => b.date - a.date);
+
+  // summary strip — always reflects exactly what's in the table below
+  const sum = (f) => rows.reduce((a,s) => a + f(s), 0);
+  const totalValue = sum(s => s.value);
+  const totalReceived = sum(s => s.received);
+  const totalFee = sum(s => s.status === 'Cancelled' ? 0 : s.fee);
+  const totalInvoiced = sum(s => s.invoiceAmt || 0);
+  const totalCommReceived = sum(s => s.billStatus === 'Received' ? (s.invoiceAmt || 0) : 0);
+  $('bkSummary').innerHTML = [
+    ['Bookings', rows.length, v=>String(v)],
+    ['Agreement value', totalValue, fmt],
+    ['Amount received', totalReceived, fmt],
+    ['Commission fee (potential)', totalFee, fmt],
+    ['Commission billed', totalInvoiced, fmt],
+    ['Commission received', totalCommReceived, fmt]
+  ].map(([l,v,f]) => `<div class="card kpi" style="padding:16px 18px"><div class="lbl">${l}</div><div class="val num" style="font-size:19px;margin-top:6px">${f(v)}</div></div>`).join('');
+
+  if (!rows.length) { tbl.innerHTML = '<tr><td class="empty">No bookings match these filters.</td></tr>'; return; }
   const billPill = b => b === 'Received' ? 'good' : b === 'Invoiced' ? 'warn' : '';
+  const payPill = p => p === 'Full' ? 'good' : p === 'Partial' ? 'warn' : 'risk';
   const STATUS_OPTS = ['Booked','Token','Agreement Done','Registered','Cancelled'];
-  tbl.innerHTML = `<tr><th>Booking</th><th>Date</th><th>Project</th><th>Customer</th><th>Sales person</th><th class="r">Agreement value</th><th>Status</th><th>Bill status</th><th class="r" style="min-width:210px">Actions</th></tr>` +
+  const thStyle = 'position:sticky;top:0;background:#0c1220;z-index:1';
+  tbl.innerHTML = `<tr><th style="${thStyle}">Booking</th><th style="${thStyle}">Date</th><th style="${thStyle}">Project</th><th style="${thStyle}">Customer</th><th style="${thStyle}">Sales person</th><th class="r" style="${thStyle}">Agreement value</th><th class="r" style="${thStyle}">Received</th><th style="${thStyle}">Payment</th><th style="${thStyle}">Status</th><th style="${thStyle}">Bill status</th><th class="r" style="min-width:210px;${thStyle}">Actions</th></tr>` +
     rows.map(s => {
       const canRaise = (s.status === 'Agreement Done' || s.status === 'Registered') && s.billStatus !== 'Invoiced' && s.billStatus !== 'Received';
       const canReceive = s.billStatus === 'Invoiced';
       const canPrint = s.billStatus === 'Invoiced' || s.billStatus === 'Received';
+      const pay = paymentStatusOf(s);
       return `<tr>
         <td class="num">${esc(s.id)}</td><td class="num">${s.date.toISOString().slice(0,10)}</td>
         <td>${esc(s.project)}</td><td>${esc(s.customer)}</td><td>${esc(s.person)}</td>
         <td class="r num">${fmt(s.value)}</td>
+        <td class="r num">${fmt(s.received)}</td>
+        <td><span class="pill ${payPill(pay)}">${pay}</span></td>
         <td><select style="padding:5px 8px;font-size:11.5px" data-prev="${esc(s.status)}" onchange="changeBookingStatus('${esc(s.id)}', this.value, this)">
           ${STATUS_OPTS.map(st => `<option ${st===s.status?'selected':''}>${st}</option>`).join('')}
         </select></td>
@@ -1433,6 +1479,21 @@ function renderBookingsList() {
         </td></tr>`;
     }).join('');
 }
+
+['bkFrom','bkTo','bkStatusFilter','bkPaymentFilter'].forEach(id => {
+  $(id).addEventListener('change', () => {
+    BF.from = $('bkFrom').value || null;
+    BF.to = $('bkTo').value || null;
+    BF.status = $('bkStatusFilter').value;
+    BF.payment = $('bkPaymentFilter').value;
+    renderBookingsList();
+  });
+});
+$('bkClearFilters').onclick = () => {
+  BF.from = null; BF.to = null; BF.status = 'all'; BF.payment = 'all';
+  $('bkFrom').value = ''; $('bkTo').value = ''; $('bkStatusFilter').value = 'all'; $('bkPaymentFilter').value = 'all';
+  renderBookingsList();
+};
 
 /** Shared write for any status transition — used by the status dropdown. */
 async function applyBookingStatus_(bookingId, status) {
