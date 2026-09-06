@@ -521,8 +521,8 @@ td.r,th.r{text-align:right}
           <div class="field"><label>Agreement status</label><select id="bkStatusFilter">
             <option value="all">All</option><option>Booked</option><option>Agreement Done</option><option>Cancelled</option>
           </select></div>
-          <div class="field"><label>Payment status</label><select id="bkPaymentFilter">
-            <option value="all">All</option><option value="Paid">Paid</option><option value="Pending">Pending</option>
+          <div class="field"><label>Commission status</label><select id="bkPaymentFilter">
+            <option value="all">All</option><option value="Paid">Received</option><option value="Pending">Due</option>
           </select></div>
           <button class="btn ghost" id="bkClearFilters" style="align-self:flex-end">Clear filters</button>
         </div>
@@ -530,7 +530,7 @@ td.r,th.r{text-align:right}
         <div style="max-height:460px;overflow-y:auto;overflow-x:auto;border:1px solid var(--line);border-radius:12px">
           <table id="tblBookings"></table>
         </div>
-        <p class="hint" style="margin-top:10px">Status dropdown offers Booked / Agreement Done / Cancelled — change it to "Agreement Done" to unlock "Raise bill" on that row. Bill amount = agreement value × the project's commission rate (per-project, editable in the Projects tab). "Mark received" appears once a bill has been raised. <b>Payment</b> and <b>Commission bill</b> are independent — Payment tracks whether the customer has paid the full agreement value; Commission bill tracks whether Realtech has billed/received its own commission, which can happen well before the customer finishes paying. Every status change updates the live Sales_Log immediately. This list shows every booking matching the filters above — scroll the box to see more; the top nav's FY/month/project filters don't apply here.</p>
+        <p class="hint" style="margin-top:10px">Status dropdown offers Booked / Agreement Done / Cancelled — change it to "Agreement Done" to unlock "Raise bill" on that row. Bill amount = agreement value × the project's commission rate (per-project, editable in the Projects tab). "Mark received" appears once a bill has been raised. <b>Commission due</b> / <b>Commission bill</b> are both about Realtech's own commission, not whether the customer has paid the developer — Due means the bill hasn't been received yet (whether or not it's been raised), Received means it has. Every status change updates the live Sales_Log immediately. This list shows every booking matching the filters above — scroll the box to see more; the top nav's FY/month/project filters don't apply here.</p>
       </div>
     </section>
 
@@ -1422,8 +1422,7 @@ async function tokenAction(bookingId, status) {
 
 /* ════════════════ ALL BOOKINGS — filter / cancel / bill / receive ════════════════ */
 function paymentStatusOf(s) {
-  if (!s.value) return 'Pending';
-  return s.received >= s.value ? 'Paid' : 'Pending';
+  return s.billStatus === 'Received' ? 'Paid' : 'Pending';
 }
 
 function renderBookingsList() {
@@ -1461,9 +1460,10 @@ function renderBookingsList() {
   const billPill = b => b === 'Received' ? 'good' : b === 'Invoiced' ? 'warn' : '';
   const billLabel = b => b === 'Received' ? 'Commission received' : b === 'Invoiced' ? 'Bill raised' : b;
   const payPill = p => p === 'Paid' ? 'good' : 'warn';
+  const payLabel = p => p === 'Paid' ? 'Received' : 'Due';
   const STATUS_OPTS = ['Booked','Agreement Done','Cancelled'];
   const thStyle = 'position:sticky;top:0;background:#0c1220;z-index:1';
-  tbl.innerHTML = `<tr><th style="${thStyle}">#</th><th style="${thStyle}">Booking</th><th style="${thStyle}">Date</th><th style="${thStyle}">Project</th><th style="${thStyle}">Unit</th><th style="${thStyle}">Customer</th><th style="${thStyle}">Sales person</th><th class="r" style="${thStyle}">Agreement value</th><th class="r" style="${thStyle}">Received</th><th style="${thStyle}">Payment</th><th style="${thStyle}">Status</th><th style="${thStyle}">Commission bill</th><th class="r" style="min-width:210px;${thStyle}">Actions</th></tr>` +
+  tbl.innerHTML = `<tr><th style="${thStyle}">#</th><th style="${thStyle}">Booking</th><th style="${thStyle}">Date</th><th style="${thStyle}">Project</th><th style="${thStyle}">Unit</th><th style="${thStyle}">Customer</th><th style="${thStyle}">Sales person</th><th class="r" style="${thStyle}">Agreement value</th><th class="r" style="${thStyle}">Received</th><th style="${thStyle}">Commission due</th><th style="${thStyle}">Status</th><th style="${thStyle}">Commission bill</th><th class="r" style="min-width:210px;${thStyle}">Actions</th></tr>` +
     rows.map((s, i) => {
       const canRaise = (s.status === 'Agreement Done' || s.status === 'Registered') && s.billStatus !== 'Invoiced' && s.billStatus !== 'Received';
       const canReceive = s.billStatus === 'Invoiced';
@@ -1478,7 +1478,7 @@ function renderBookingsList() {
         <td>${esc(s.project)}</td><td class="num">${esc(s.unit)||'—'}</td><td>${esc(s.customer)}</td><td>${esc(s.person)}</td>
         <td class="r num">${fmt(s.value)}</td>
         <td class="r num">${fmt(s.received)}</td>
-        <td><span class="pill ${payPill(pay)}">${pay}</span></td>
+        <td><span class="pill ${payPill(pay)}">${payLabel(pay)}</span></td>
         <td><select style="padding:5px 8px;font-size:11.5px" data-prev="${esc(s.status)}" onchange="changeBookingStatus('${esc(s.id)}', this.value, this)">
           ${opts.map(st => `<option ${st===s.status?'selected':''}>${esc(st)}</option>`).join('')}
         </select></td>
