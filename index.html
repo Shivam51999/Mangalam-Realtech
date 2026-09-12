@@ -322,7 +322,7 @@ td.r,th.r{text-align:right}
       <div class="card section">
         <h3>Site P&amp;L — with central cost allocated by revenue share</h3>
         <div style="overflow-x:auto"><table id="tblSite"></table></div>
-        <p class="hint" style="margin-top:10px">Fee income = agreement value × the project's commission rate (4.75% Aikyam, 5% others — override per project in the master). Central marketing &amp; CP-sourcing costs are spread across sites in proportion to each site's fee income, so contribution reflects what each site truly earns Realtech.</p>
+        <p class="hint" style="margin-top:10px">Fee income = agreement value × the project's commission rate (4.75% Aikyam, 5% others — override per project in the master). Direct spend includes each site's payroll, computed automatically from the roster (monthly salary × months on board) — no salary entries needed in Expenses. Central costs, including CENTRAL payroll, are spread across sites in proportion to each site's fee income, so contribution reflects what each site truly earns Realtech.</p>
       </div>
 
       <div class="card section">
@@ -344,7 +344,7 @@ td.r,th.r{text-align:right}
           <div class="chartbox"><canvas id="chPnl"></canvas></div>
         </div>
       </div>
-      <p class="hint section">Company-wide view (project filter doesn't apply here). When the Team roster has active employees, payroll is computed automatically from the roster — don't also log salaries in Expenses or you'd count them twice. Incentives accrue automatically from bookings × each person's incentive rate.</p>
+      <p class="hint section">Company-wide view (project filter doesn't apply here). Payroll runs itself: every active roster member with a monthly salary is charged to their site, once a month, from their joining month to the current month. Salary rows logged in Expenses are ignored while the roster is live, so nothing is counted twice. Incentives accrue automatically from bookings × each person's incentive rate; telecalling incentive and team awards are read from what you log in Expenses.</p>
     </section>
 
     <!-- ═══ TEAM ═══ -->
@@ -370,10 +370,11 @@ td.r,th.r{text-align:right}
           <div class="field"><label>Monthly salary (₹)</label><input type="number" id="tSalary" placeholder="45000"></div>
           <div class="field"><label>Incentive % of sale value</label><input type="number" id="tIncentive" step="0.01" placeholder="0.10"></div>
           <div class="field"><label>Monthly booking target</label><input type="number" id="tTarget" placeholder="3"></div>
+          <div class="field"><label>Joined on</label><input type="date" id="tJoined"></div>
         </div>
         <div class="formfoot">
           <button class="btn" id="saveEmployee">Add member</button>
-          <span class="hint">Name must match the "Sales person" typed on bookings — that's how fee credit and incentives are matched.</span>
+          <span class="hint">Name must match the "Sales person" typed on bookings — that's how fee credit and incentives are matched. Salary + site drive payroll on their own: every month from the joining month onward is charged to that site automatically, so salaries never need an expense entry.</span>
         </div>
       </div>
     </section>
@@ -844,6 +845,10 @@ function normSales() {
     };
   }).filter(s => s.date && s.project);
 }
+/* Heads that were retired from the picker but may still exist on older rows —
+   kept here only so historical spend keeps landing in the right bucket. */
+const LEGACY_CAT_SOURCE = { cpteamsalary: 'Channel Partner' };
+
 function normExpenses() {
   const map = {};
   (DB.expenseCategories || []).forEach(c => map[nkey(c.category)] = c.source);
@@ -857,7 +862,7 @@ function normExpenses() {
       category,
       desc: pick(m, 'description', 'desc', 'particulars', 'details') || '',
       amount: toNum(pick(m, 'amount', 'value', 'cost', 'expense')),
-      source: map[nkey(category)] || 'Other'
+      source: map[nkey(category)] || LEGACY_CAT_SOURCE[nkey(category)] || 'Other'
     };
   }).filter(e => e.date && e.amount > 0);
 }
@@ -873,9 +878,52 @@ function normTeam() {
       salary: toNum(pick(m, 'monthly salary', 'salary', 'monthly ctc')),
       incPct: toNum(pick(m, 'incentive % (of sale value)', 'incentive %', 'incentive', 'incentive pct')),
       target: toNum(pick(m, 'monthly booking target', 'booking target', 'target')),
-      status: pick(m, 'status') || 'Active'
+      status: pick(m, 'status') || 'Active',
+      joined: toDate(pick(m, 'joined', 'joining date', 'date of joining', 'doj'))
     };
   }).filter(e => e.name);
+}
+
+/* ── AUTO PAYROLL ─────────────────────────────────────────────────────
+   Once a roster member has a monthly salary and a site, the system
+   charges that salary to that site once every month, on its own — no
+   expense entry required. Accrual starts the month they joined (if a
+   Joined date is on the roster, else the first month of the period)
+   and stops at the current month; future months are never charged.
+   People marked Exited / Inactive stop accruing entirely.
+
+   The rows are shaped exactly like expense rows, so the monthly series,
+   site P&L, overhead buckets and budget page all pick payroll up
+   automatically. Manually logged salary heads are dropped while this is
+   running, so nothing is ever counted twice.                          */
+const PAYROLL_CAT = 'Payroll (auto)';
+const SALARY_CATS = ['Sales Team Salary', 'Marketing Team Salary', 'CP Team Salary'];
+
+function payrollLedger(months, now) {
+  const rows = [];
+  normTeam().forEach(e => {
+    if (!(e.salary > 0)) return;
+    const st = nrm(e.status);
+    if (st === 'exited' || st === 'inactive' || st === 'left' || st === 'resigned') return;
+    const from = e.joined ? new Date(e.joined.getFullYear(), e.joined.getMonth(), 1) : null;
+    months.forEach(m => {
+      const first = new Date(m.y, m.m, 1);
+      if (first > now) return;              // never charge a month that hasn't started
+      if (from && first < from) return;     // never charge before they joined
+      rows.push({
+        id: 'PAY-' + m.key + '-' + nkey(e.name),
+        date: first,
+        scope: e.site || 'CENTRAL',
+        category: PAYROLL_CAT,
+        desc: e.name + ' · monthly salary',
+        amount: e.salary,
+        source: 'Payroll',
+        person: e.name,
+        auto: true
+      });
+    });
+  });
+  return rows;
 }
 
 /* ── filters ── */
@@ -926,12 +974,12 @@ function inRange(d) {
 const MONTHS_CAL = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 function analyse() {
   const now = new Date();
-  const allSales = normSales(), allExps = normExpenses();
+  const allSales = normSales(), loggedExps = normExpenses();
   const projFilter = s => F.project === 'all' || nrm(s) === nrm(F.project);
 
-  // period slices (FY + month filter)
+  // period slices (FY + month filter) — expenses are sliced further down,
+  // once the auto-payroll ledger has been merged in
   const sales = allSales.filter(s => inRange(s.date));
-  const exps  = allExps.filter(e => inRange(e.date));
   const active = sales.filter(s => s.status !== 'Cancelled' && s.status !== 'Token');
   const cancelled = sales.filter(s => s.status === 'Cancelled');
   const tokenRows = sales.filter(s => s.status === 'Token');
@@ -939,7 +987,7 @@ function analyse() {
   // monthly series: one FY, or the entire data range (+3 months headroom) in All-time
   let months;
   if (F.fy === 'all') {
-    const dates = [...allSales.map(s=>s.date), ...allExps.map(e=>e.date)].filter(Boolean);
+    const dates = [...allSales.map(s=>s.date), ...loggedExps.map(e=>e.date)].filter(Boolean);
     const min = dates.length ? new Date(Math.min.apply(null, dates)) : now;
     let maxD = dates.length ? new Date(Math.max.apply(null, dates)) : now;
     if (maxD < now) maxD = now;
@@ -954,6 +1002,18 @@ function analyse() {
   } else {
     months = fyMonths(F.fy);
   }
+
+  /* auto payroll: one salary row per person, per site, per month worked */
+  const payRows = payrollLedger(months, now);
+  const rosterMode = payRows.length > 0;
+  // while the roster is driving payroll, ignore manually logged salary heads
+  // so the same salary never lands in the numbers twice
+  const allExps = (rosterMode
+      ? loggedExps.filter(e => !SALARY_CATS.some(c => nkey(c) === nkey(e.category)))
+      : loggedExps).concat(payRows);
+  const exps = allExps.filter(e => inRange(e.date));
+  const payPeriod = payRows.filter(e => inRange(e.date));
+
   const series = months.map(m => ({ ...m, revenue:0, fee:0, bookings:0, expense:0, cancel:0 }));
   const idx = {}; months.forEach((m,i)=>idx[m.key]=i);
   allSales.forEach(s => {
@@ -1094,23 +1154,27 @@ function analyse() {
     o.pay += bookingPayouts(s, rules, rosterByName).exec;   // row-level incentive wins, else roster rate
   });
 
+  const payByPerson = {};
+  payPeriod.forEach(r => payByPerson[nrm(r.person)] = (payByPerson[nrm(r.person)] || 0) + r.amount);
+
   const team = roster.map(e => {
     const st = byPerson[e.name.toLowerCase()] || { bookings:0, gdv:0, fee:0, pay:0 };
     const incentive = st.pay;
-    const cost = e.salary * mip + incentive;
-    return { ...e, bookings: st.bookings, gdv: st.gdv, fee: st.fee, incentive, cost,
+    const salaryPeriod = payByPerson[nrm(e.name)] || 0;   // only the months they were actually on board
+    const cost = salaryPeriod + incentive;
+    return { ...e, salaryPeriod, bookings: st.bookings, gdv: st.gdv, fee: st.fee, incentive, cost,
       roi: cost > 0 ? st.fee / cost : null,
       targetAch: e.target > 0 ? st.bookings / (e.target * mip) : null, onRoster: true };
   });
   Object.entries(byPerson).forEach(([k, st]) => {
     if (!roster.some(e => e.name.toLowerCase() === k))
-      team.push({ name: st.display, role: '—', site: '—', salary: 0, incPct: 0, target: 0,
+      team.push({ name: st.display, role: '—', site: '—', salary: 0, salaryPeriod: 0, incPct: 0, target: 0,
         bookings: st.bookings, gdv: st.gdv, fee: st.fee, incentive: st.pay, cost: st.pay,
         roi: null, targetAch: null, onRoster: false });
   });
   team.sort((a,b) => b.fee - a.fee);
 
-  const payroll = roster.reduce((a,e) => a + e.salary * mip, 0);
+  const payroll = payPeriod.reduce((a,r) => a + r.amount, 0);   // auto: salary × months on board, per site
   const incentiveTotal = team.reduce((a,t) => a + t.incentive, 0);
 
   const catAmt = {};
@@ -1120,19 +1184,20 @@ function analyse() {
   const gdvAll = active.reduce((a,s) => a + s.value, 0);
   const bkAll = active.length;
   const variableSelling = cat('Hoarding & Outdoor') + cat('Digital Marketing') + cat('CP Brokerage') + cat('Referral Payout');
-  const mktOverhead = cat('Events & Activations') + cat('Collaterals & Print');
+  const mktOverhead = cat('Events & Activations') + cat('Collaterals & Print') + cat('Marketing Team Award');
+  // only reachable when the roster is empty — CP Team Salary kept for old rows
   const loggedSalaries = cat('Sales Team Salary') + cat('Marketing Team Salary') + cat('CP Team Salary');
   const otherCost = cat('Other');
-  const rosterMode = roster.length > 0;
+  const teamAwards = cat('Telecalling Incentive') + cat('Sales Team Award');
   const payrollUsed = rosterMode ? payroll : loggedSalaries;
-  const peopleCost = payrollUsed + incentiveTotal;
+  const peopleCost = payrollUsed + incentiveTotal + teamAwards;
   const gross = feeAll - variableSelling;
   const opProfit = gross - peopleCost - mktOverhead - otherCost;
   const feePerBk = bkAll ? feeAll / bkAll : 0;
   const varPerBk = bkAll ? variableSelling / bkAll : 0;
   const fixedMonthly = (peopleCost + mktOverhead + otherCost) / mip;
   const pnl = { feeAll, gdvAll, bkAll, variableSelling, gross, peopleCost, payroll: payrollUsed,
-    incentiveTotal, mktOverhead, otherCost, opProfit,
+    incentiveTotal, teamAwards, mktOverhead, otherCost, opProfit,
     margin: feeAll > 0 ? opProfit / feeAll : null, rosterMode, mip,
     breakEvenBk: feePerBk > varPerBk && fixedMonthly > 0 ? Math.ceil(fixedMonthly / (feePerBk - varPerBk)) : null,
     feePerHead: roster.length ? feeAll / roster.length : null };
@@ -1157,7 +1222,8 @@ function analyse() {
   ].map(p => ({ ...p, outstanding: p.accrued - p.paid }));
 
   // budget context — renderBudget slices this per scope (company-wide or one project)
-  const budCtx = { exps, active, tokens: tokenRows, roster, rules, rosterByName, mip, rosterMode, loggedSalaries };
+  const budCtx = { exps, active, tokens: tokenRows, roster, rules, rosterByName, mip, rosterMode, loggedSalaries,
+    payRows: payPeriod };
   const budgetRows = budgetRowsFor(budCtx, 'ALL');
   const budTotal = budgetRows.reduce((a,r) => a + r.budget, 0);
   const budActual = budgetRows.reduce((a,r) => a + r.actual, 0);
@@ -1183,9 +1249,9 @@ function budgetRowsFor(C, scope) {
     return a;
   }, { brokerage:0, cpBonus:0, walkin:0, referral:0, exec:0 });
   const tokenAcc = toks.length * C.rules.tokenBonusPerToken;
-  const scopeRoster = C.roster.filter(e => all ? true : nrm(e.site) === nrm(scope));
-  const payrollScoped = scopeRoster.reduce((a,e) => a + e.salary * C.mip, 0);
-  const payrollBase = all ? (C.rosterMode ? payrollScoped : C.loggedSalaries) : payrollScoped;
+  const payrollScoped = (C.payRows || []).filter(r => all ? true : nrm(r.scope) === nrm(scope))
+    .reduce((a, r) => a + r.amount, 0);
+  const payrollBase = C.rosterMode ? payrollScoped : (all ? C.loggedSalaries : 0);
   const perMo = v => v / C.mip;
   const budgets = normBudgets();
   const bud = name => { const b = budgets[nkey(scope) + '|' + nkey(name)]; return b ? b.amount : 0; };
@@ -1197,6 +1263,9 @@ function budgetRowsFor(C, scope) {
     ['Walk-in Payout',       perMo(Math.max(cat('Walk-in Payout'), pay.walkin)),     perMo(pay.walkin)],
     ['Referral Payout',      perMo(Math.max(cat('Referral Payout'), pay.referral)),  perMo(pay.referral)],
     ['Token Bonus',          perMo(Math.max(cat('Token Bonus'), tokenAcc)),          perMo(tokenAcc)],
+    ['Telecalling Incentive',perMo(cat('Telecalling Incentive')),                    perMo(cat('Telecalling Incentive'))],
+    ['Sales Team Award',     perMo(cat('Sales Team Award')),                         perMo(cat('Sales Team Award'))],
+    ['Marketing Team Award', perMo(cat('Marketing Team Award')),                     perMo(cat('Marketing Team Award'))],
     ['Events & Activations', perMo(cat('Events & Activations')),                     perMo(cat('Events & Activations'))],
     ['Collaterals & Print',  perMo(cat('Collaterals & Print')),                      perMo(cat('Collaterals & Print'))],
     ['Other',                perMo(cat('Other')),                                    perMo(cat('Other'))],
@@ -1895,9 +1964,10 @@ function renderPnl(A) {
     + li('Variable selling cost (hoarding · digital · brokerage · referral)', -P.variableSelling, '--ember')
     + li('Gross contribution', P.gross, P.gross>=0?'--jade':'--ember')
     + li('People cost', -P.peopleCost, '--ember')
-    + li((P.rosterMode?'Payroll (auto from roster)':'Payroll (logged expenses)'), -P.payroll, null, true)
+    + li((P.rosterMode?'Payroll (auto from roster, by site)':'Payroll (logged expenses)'), -P.payroll, null, true)
     + li('Incentives accrued', -P.incentiveTotal, null, true)
-    + li('Marketing overhead (events · collaterals)', -P.mktOverhead, '--ember')
+    + li('Telecalling incentive · sales award (logged)', -P.teamAwards, null, true)
+    + li('Marketing overhead (events · collaterals · marketing award)', -P.mktOverhead, '--ember')
     + li('Other', -P.otherCost, '--ember')
     + li('Operating profit', P.opProfit, P.opProfit>=0?'--jade':'--ember');
 
@@ -1905,7 +1975,7 @@ function renderPnl(A) {
   const segs = [
     ['Variable selling', P.variableSelling, '#FF6F62'],
     ['Payroll', P.payroll, '#A18BFF'],
-    ['Incentives', P.incentiveTotal, '#F0BC52'],
+    ['Incentives', P.incentiveTotal + P.teamAwards, '#F0BC52'],
     ['Overheads', P.mktOverhead + P.otherCost, '#F2B650'],
     ['Profit', Math.max(0, P.opProfit), '#3CE4A4']
   ].filter(s => s[1] > 0);
@@ -1944,7 +2014,7 @@ function renderTeam(A) {
       const tgt = t.targetAch==null ? '–' : `<span class="pill ${t.targetAch>=1?'good':t.targetAch>=0.7?'warn':'risk'}">${pct(t.targetAch)}</span>`;
       return `<tr><td>${esc(t.name)}</td><td>${esc(t.role)}</td><td>${esc(t.site)}</td>
         <td class="r num">${t.bookings}</td><td class="r num">${fmt(t.gdv)}</td><td class="r num">${fmt(t.fee)}</td>
-        <td class="r num">${t.onRoster?fmt(t.salary*A.mip):'–'}</td><td class="r num">${fmt(t.incentive)}</td>
+        <td class="r num">${t.onRoster?fmt(t.salaryPeriod||0):'–'}</td><td class="r num">${fmt(t.incentive)}</td>
         <td class="r">${roiPill}</td><td class="r">${tgt}</td></tr>`;
     }).join('') : '<tr><td colspan="10" class="empty">Add team members below — bookings match by sales person name</td></tr>');
 
@@ -2288,10 +2358,12 @@ $('saveProject').onclick = function() {
 
 $('saveEmployee').onclick = function() {
   const p = { action:'addEmployee', name:$('tName').value.trim(), role:$('tRole').value, site:$('tSite').value,
-    salary:$('tSalary').value, incentivePct:$('tIncentive').value, bookingTarget:$('tTarget').value };
+    salary:$('tSalary').value, incentivePct:$('tIncentive').value, bookingTarget:$('tTarget').value,
+    joined:$('tJoined').value || '' };
   if (!p.name) return toast('Name is required');
   submit(this, p, () => (DB.team = DB.team || []).push({ 'Employee ID':'EMP-DEMO','Name':p.name,'Role':p.role,'Site':p.site,
-    'Monthly Salary':p.salary,'Incentive % (of sale value)':p.incentivePct,'Monthly Booking Target':p.bookingTarget,'Status':'Active' }));
+    'Monthly Salary':p.salary,'Incentive % (of sale value)':p.incentivePct,'Monthly Booking Target':p.bookingTarget,
+    'Status':'Active','Joined':p.joined }));
 };
 
 /* ════════════════ NAV & FILTERS ════════════════ */
@@ -2349,9 +2421,11 @@ function demoData() {
   const sources = ['Hoarding','Digital Marketing','Channel Partner','Referral','Direct Walk-in'];
   const expenseCategories = [
     { category:'Hoarding & Outdoor', source:'Hoarding' },{ category:'Digital Marketing', source:'Digital Marketing' },
-    { category:'CP Brokerage', source:'Channel Partner' },{ category:'CP Team Salary', source:'Channel Partner' },
+    { category:'CP Brokerage', source:'Channel Partner' },
     { category:'Referral Payout', source:'Referral' },{ category:'Sales Team Salary', source:'Sales Overhead' },
-    { category:'Marketing Team Salary', source:'Marketing Overhead' },{ category:'Events & Activations', source:'Marketing Overhead' },
+    { category:'Telecalling Incentive', source:'Sales Overhead' },{ category:'Sales Team Award', source:'Sales Overhead' },
+    { category:'Marketing Team Salary', source:'Marketing Overhead' },{ category:'Marketing Team Award', source:'Marketing Overhead' },
+    { category:'Events & Activations', source:'Marketing Overhead' },
     { category:'Collaterals & Print', source:'Marketing Overhead' },{ category:'Other', source:'Other' }
   ];
   let seed = 42; const rnd = () => (seed = (seed*16807)%2147483647) / 2147483647;
@@ -2394,7 +2468,7 @@ function demoData() {
     const addE = (scope,cat,amt,desc) => expenses.push({ 'Expense ID':'EX-'+String(ex++).padStart(4,'0'),'Date':dstr(3+Math.floor(rnd()*22)),'Scope':scope,'Category':cat,'Description':desc,'Amount':Math.round(amt) });
     addE('CENTRAL','Digital Marketing', (4+rnd()*2.5)*1e5*growth, 'Meta + Google campaigns');
     addE('CENTRAL','Marketing Team Salary', 4.5e5, 'Central marketing payroll');
-    addE('CENTRAL','CP Team Salary', 3.5e5, 'CP sourcing payroll');
+    addE('CENTRAL','Telecalling Incentive', (0.6+rnd()*0.6)*1e5*growth, 'Telecalling team incentive');
     addE('CENTRAL','Events & Activations', (0.5+rnd()*1.5)*1e5, 'Society activations');
     projects.forEach(p => {
       addE(p['Project Name'],'Hoarding & Outdoor', (0.8+rnd()*1.2)*1e5, 'Site hoardings');
