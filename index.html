@@ -243,6 +243,7 @@ td.r,th.r{text-align:right}
     <button class="navbtn active" data-view="pulse" data-label="Pulse"><span class="ic">◉</span>Pulse</button>
     <button class="navbtn" data-view="pnl" data-label="P&amp;L"><span class="ic">Σ</span>P&amp;L</button>
     <button class="navbtn" data-view="budget" data-label="Budget"><span class="ic">◫</span>Budget</button>
+    <button class="navbtn" data-view="billing" data-label="Billing"><span class="ic">◈</span>Billing</button>
     <button class="navbtn" data-view="targets" data-label="Targets"><span class="ic">⊕</span>Targets</button>
     <button class="navbtn" data-view="team" data-label="Team"><span class="ic">⬡</span>Team</button>
     <button class="navbtn" data-view="forecast" data-label="Forecast"><span class="ic">↗</span>Forecast</button>
@@ -400,6 +401,28 @@ td.r,th.r{text-align:right}
           <p class="hint" style="margin-top:10px">Accrued = what bookings have earned (brokerage, bonuses, incentives). Paid = what's logged in Expenses under the matching head. Outstanding = the liability building up quietly.</p>
         </div>
       </div>
+    </section>
+
+    <!-- ═══ BILLING ═══ -->
+    <section class="view" id="view-billing">
+      <div class="grid kpis" id="billCards"></div>
+      <div class="grid two section">
+        <div class="card">
+          <h3>Ageing — how long the money has been sitting out</h3>
+          <div style="overflow-x:auto"><table id="tblBillAgeing"></table></div>
+          <p class="hint" style="margin-top:10px">Measured from the invoice date. Anything past 60 days needs a name against it, not a follow-up email.</p>
+        </div>
+        <div class="card">
+          <h3>Ready to bill — commission earned, no bill raised</h3>
+          <div style="overflow-x:auto"><table id="tblBillReady"></table></div>
+          <p class="hint" style="margin-top:10px">Agreement done or registered, so the commission is earned and billable today. Raising the bill here is the same action as on the booking row.</p>
+        </div>
+      </div>
+      <div class="card section">
+        <h3>Outstanding in market — bill raised, money not received</h3>
+        <div style="overflow-x:auto"><table id="tblBillOutstanding"></table></div>
+      </div>
+      <p class="hint section">Receivables are a live position, so the FY and month filters don't apply on this page — an invoice raised last year is still owed today. The project filter does apply. Cancelled bookings and tokens are excluded throughout.</p>
     </section>
 
     <!-- ═══ TARGETS ═══ -->
@@ -1243,7 +1266,8 @@ function analyse() {
     bySource, overheads, sites, series, pacing, elapsed, fc, activeMonths,
     fyToDateFee, fcFyTotal, health, centralTotal, team, roster, activeRoster, pnl, mip,
     rules, tokensView, tokensAll: tokenRows, tokenFeePotential, accr, payables,
-    budCtx, budgetRows, budTotal, budActual };
+    budCtx, budgetRows, budTotal, budActual,
+    billing: billingPosition(projFilter) };
 }
 
 /* ── scoped budget rows: scope = 'ALL' (company) or a project name ── */
@@ -1461,7 +1485,7 @@ function renderAll() {
   const A = analyse();
   renderKPIs(A); renderHealth(A); renderCharts(A);
   renderSourceTable(A); renderSiteTable(A); renderOverheads(A);
-  renderPnl(A); renderTeam(A);
+  renderPnl(A); renderTeam(A); renderBilling(A);
   renderTokens(A); renderBudget(A);
   renderTargets(A); renderSimulator(A);
   renderForecast(A); renderInsights(A); renderProjects();
@@ -1498,6 +1522,60 @@ async function tokenAction(bookingId, status) {
     if (CONFIG.API_URL) { const d = await apiGet('data'); if (!d.error) DB = d; }
     renderAll();
   } catch (e) { toast('Failed: ' + e.message); }
+}
+
+/* ── BILLING POSITION ────────────────────────────────────────────────
+   What's been billed to the developer, what's come back, and what's
+   still sitting in the market. This is a live position, not a period
+   flow — an invoice raised last FY is still owed today — so the FY and
+   month filters deliberately don't apply here. The project filter does.
+   Cancelled bookings and tokens are excluded.
+
+   'Billed' uses the actual Invoice Amount on the row, falling back to
+   the computed commission if the amount was never filled in.          */
+function billingPosition(projFilterFn) {
+  const now = new Date();
+  const rows = normSales()
+    .filter(s => s.status !== 'Cancelled' && s.status !== 'Token')
+    .filter(s => projFilterFn(s.project));
+
+  let earned = 0, billed = 0, received = 0, readyAmt = 0, earlyAmt = 0;
+  const open = [], ready = [], early = [];
+  const ageing = [
+    { label: '0–30 days',  lo: 0,  hi: 30,       amount: 0, count: 0 },
+    { label: '31–60 days', lo: 31, hi: 60,       amount: 0, count: 0 },
+    { label: '61–90 days', lo: 61, hi: 90,       amount: 0, count: 0 },
+    { label: '90+ days',   lo: 91, hi: Infinity, amount: 0, count: 0 }
+  ];
+
+  rows.forEach(s => {
+    earned += s.fee;
+    const bs = String(s.billStatus || '').trim();
+    const amt = (s.invoiceAmt || 0) || s.fee;
+    if (bs === 'Invoiced' || bs === 'Received') {
+      billed += amt;
+      if (bs === 'Received') {
+        received += amt;
+      } else {
+        const idate = toDate(s.invoiceDate);
+        const days = idate ? Math.max(0, Math.floor((now - idate) / 864e5)) : null;
+        open.push({ id: s.id, customer: s.customer, project: s.project, person: s.person,
+          invoiceNo: s.invoiceNo, amt, days, idate });
+        const b = ageing.filter(x => days != null && days >= x.lo && days <= x.hi)[0] || ageing[0];
+        b.amount += amt; b.count++;
+      }
+    } else if (s.status === 'Agreement Done' || s.status === 'Registered') {
+      ready.push(s); readyAmt += s.fee;
+    } else {
+      early.push(s); earlyAmt += s.fee;
+    }
+  });
+
+  open.sort((a, b) => (b.days || 0) - (a.days || 0));
+  ready.sort((a, b) => b.fee - a.fee);
+
+  return { earned, billed, received, outstanding: billed - received,
+    readyAmt, earlyAmt, open, ready, early, ageing, count: rows.length };
 }
 
 /* ════════════════ ALL BOOKINGS — filter / cancel / bill / receive ════════════════ */
@@ -2043,6 +2121,50 @@ function renderPnl(A) {
   });
 }
 
+function renderBilling(A) {
+  const B = A.billing;
+  const collectedPct = B.billed > 0 ? B.received / B.billed : null;
+  const cards = [
+    ['Outstanding in market', B.outstanding, fmt, 'billed, money not received', null, B.outstanding>0?'#FF6F62':'#3CE4A4'],
+    ['Commission billed', B.billed, fmt, 'invoices raised, all time', null, '#F0BC52'],
+    ['Commission received', B.received, fmt, collectedPct!=null?pct(collectedPct)+' of what was billed':'nothing billed yet', null, '#3CE4A4'],
+    ['Ready to bill', B.readyAmt, fmt, B.ready.length+' bookings agreement done / registered', null, '#5BE3FF'],
+    ['Not billable yet', B.earlyAmt, fmt, B.early.length+' still at booking stage', null, '#A18BFF'],
+    ['Revenue earned', B.earned, fmt, B.count+' live bookings', null, '#F2B650']
+  ];
+  $('billCards').innerHTML = cards.map(([l,,,d,,]) =>
+    `<div class="card kpi"><div class="lbl">${l}</div><div class="val num">–</div><div class="delta flat">${d}</div></div>`).join('');
+  document.querySelectorAll('#billCards .val').forEach((el,i) => countUp(el, cards[i][1], cards[i][2]));
+
+  $('tblBillAgeing').innerHTML = `<tr><th>Age</th><th class="r">Invoices</th><th class="r">Amount</th><th class="r">Share</th></tr>` +
+    (B.outstanding > 0 ? B.ageing.map(a => {
+      const share = B.outstanding > 0 ? a.amount / B.outstanding : 0;
+      const risk = a.lo >= 91 ? 'risk' : a.lo >= 61 ? 'warn' : 'good';
+      return `<tr><td><span class="pill ${risk}">${a.label}</span></td><td class="r num">${a.count}</td>
+        <td class="r num">${fmt(a.amount)}</td><td class="r num">${a.amount?pct(share):'–'}</td></tr>`;
+    }).join('') : '<tr><td colspan="4" class="empty">Nothing outstanding — every bill raised has been received</td></tr>');
+
+  $('tblBillReady').innerHTML = `<tr><th>Booking</th><th>Customer</th><th>Project</th><th class="r">Commission due</th><th class="r">Action</th></tr>` +
+    (B.ready.length ? B.ready.slice(0, 40).map(s =>
+      `<tr><td>${esc(s.id)}</td><td>${esc(s.customer||'–')}</td><td>${esc(s.project)}</td>
+        <td class="r num">${fmt(s.fee)}</td>
+        <td class="r"><button class="btn ghost" style="padding:5px 11px;font-size:11.5px" onclick="raiseBill('${esc(s.id)}')">Raise bill</button></td></tr>`
+      ).join('') + (B.ready.length > 40 ? `<tr><td colspan="5" class="hint">+ ${B.ready.length-40} more — use the Booking page filters</td></tr>` : '')
+    : '<tr><td colspan="5" class="empty">Nothing waiting to be billed</td></tr>');
+
+  $('tblBillOutstanding').innerHTML = `<tr><th>Invoice</th><th>Booking</th><th>Customer</th><th>Project</th><th>Raised on</th><th class="r">Days out</th><th class="r">Amount</th><th class="r" style="min-width:210px">Action</th></tr>` +
+    (B.open.length ? B.open.map(s => {
+      const d = s.days;
+      const pill = d == null ? '<span class="pill warn">no date</span>'
+        : `<span class="pill ${d<=30?'good':d<=60?'warn':'risk'}">${d} days</span>`;
+      return `<tr><td>${esc(s.invoiceNo||'–')}</td><td>${esc(s.id)}</td><td>${esc(s.customer||'–')}</td>
+        <td>${esc(s.project)}</td><td>${s.idate?s.idate.toLocaleDateString('en-IN'):'–'}</td>
+        <td class="r">${pill}</td><td class="r num">${fmt(s.amt)}</td>
+        <td class="r"><button class="btn ghost" style="padding:5px 11px;font-size:11.5px" onclick="markReceived('${esc(s.id)}')">Mark received</button>
+        <button class="btn ghost" style="padding:5px 11px;font-size:11.5px;margin-left:5px" onclick="printInvoice('${esc(s.id)}')">Print</button></td></tr>`;
+    }).join('') : '<tr><td colspan="8" class="empty">No bills are waiting on payment</td></tr>');
+}
+
 function renderTeam(A) {
   const T = A.team, P = A.pnl;
   const top = T.find(t => t.fee > 0);
@@ -2137,7 +2259,11 @@ function renderKPIs(A) {
     `<span class="chip"><b>${A.bookings}</b>${A.bookings !== totalBk ? ' of ' + totalBk : ''} bookings${A.bookings !== totalBk ? ' in view' : ''}</span>`,
     `<span class="chip"><b>${fmt(A.expense)}</b> spend</span>`,
     `<span class="chip ${net>=0?'pos':'neg'}"><b>${fmt(net)}</b> net</span>`,
-    `<span class="chip"><b>${fmt(A.received)}</b> collected</span>`
+    `<span class="chip"><b>${fmt(A.received)}</b> collected from customers</span>`,
+    `<span class="chip"><b>${fmt(A.billing.received)}</b> commission received</span>`,
+    (A.billing.outstanding > 0
+      ? `<span class="chip" style="border-color:rgba(255,111,98,.45);color:var(--ember)"><b>${fmt(A.billing.outstanding)}</b> outstanding in market</span>`
+      : '')
   ].join('') + (A.tokensView.length ? `<span class="chip" style="border-color:rgba(91,227,255,.4);color:var(--cyan)"><b>${A.tokensView.length}</b> tokens · ${fmt(A.tokenFeePotential)} revenue if all book</span>` : '') + (A.bookings !== totalBk
     ? `<span class="chip" style="border-color:rgba(240,188,82,.4);color:var(--amber)">${totalBk - A.bookings} in other periods — switch to “All time”</span>` : '');
 
