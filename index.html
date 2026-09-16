@@ -344,7 +344,7 @@ td.r,th.r{text-align:right}
           <div class="chartbox"><canvas id="chPnl"></canvas></div>
         </div>
       </div>
-      <p class="hint section">Company-wide view (project filter doesn't apply here). When the Team roster has active employees, payroll is computed automatically from the roster — don't also log salaries in Expenses or you'd count them twice. Incentives accrue automatically from bookings × each person's incentive rate.</p>
+      <p class="hint section">Company-wide view (project filter doesn't apply here). When the Team roster has active employees, payroll is computed automatically from the roster — don't also log salaries in Expenses or you'd count them twice. Incentives accrue automatically as a flat ₹ amount per booking (set per person below) — since the rate actually varies by site/campaign, type the specific amount into "Sales exec incentive" on the booking itself whenever it differs from that person's default.</p>
     </section>
 
     <!-- ═══ TEAM ═══ -->
@@ -368,7 +368,7 @@ td.r,th.r{text-align:right}
           </select></div>
           <div class="field"><label>Site</label><select id="tSite"></select></div>
           <div class="field"><label>Monthly salary (₹)</label><input type="number" id="tSalary" placeholder="45000"></div>
-          <div class="field"><label>Incentive % of sale value</label><input type="number" id="tIncentive" step="0.01" placeholder="0.10"></div>
+          <div class="field"><label>Incentive per booking (₹)</label><input type="number" id="tIncentive" step="500" placeholder="5000"></div>
           <div class="field"><label>Monthly booking target</label><input type="number" id="tTarget" placeholder="3"></div>
         </div>
         <div class="formfoot">
@@ -436,7 +436,7 @@ td.r,th.r{text-align:right}
             <div class="field"><label>Team headcount</label><input type="number" id="simHead" min="0" step="1">
               <input type="range" id="simHeadR" min="0" max="40" step="1" style="width:100%;margin-top:8px"></div>
             <div class="field"><label>Avg monthly salary (₹)</label><input type="number" id="simSalary" min="0" step="1000"></div>
-            <div class="field"><label>Incentive % of sale value</label><input type="number" id="simInc" min="0" max="2" step="0.01"></div>
+            <div class="field"><label>Incentive per booking (₹)</label><input type="number" id="simInc" min="0" step="500"></div>
             <div class="field"><label>Cancellation rate %</label><input type="number" id="simCancel" min="0" max="50" step="0.5"></div>
             <div class="field"><label>Fixed overheads / month (₹)</label><input type="number" id="simOverhead" min="0" step="10000"></div>
           </div>
@@ -802,7 +802,7 @@ function bookingPayouts(s, rules, rosterByName) {
     cpInc:     s.cpInc     != null ? s.cpInc     : (cp ? rules.cpTeamBonusPerBooking : 0),
     referral:  s.refPay    != null ? s.refPay    : (rf ? s.value * rules.referralPayoutPct/100 : 0),
     walkin:    wi ? rules.walkInPayoutPerBooking : 0,
-    exec:      s.execInc   != null ? s.execInc   : (emp ? s.value * emp.incPct/100 : 0)
+    exec:      s.execInc   != null ? s.execInc   : (emp ? emp.incPct : 0)
   };
 }
 
@@ -864,6 +864,15 @@ function normExpenses() {
       source: map[nkey(category)] || 'Other'
     };
   }).filter(e => e.date && e.amount > 0);
+}
+
+/* Guards against a duplicated name in the Team sheet double-counting someone's
+   incentive/salary — keeps one row per normalized name (last one wins, since a
+   re-added row is usually the corrected entry). */
+function dedupeRoster_(roster) {
+  const byName = {};
+  roster.forEach(e => { byName[nrm(e.name)] = e; });
+  return Object.values(byName);
 }
 
 function normTeam() {
@@ -1091,7 +1100,7 @@ function analyse() {
   /* ── PEOPLE & P&L (company-wide: FY + month filters apply, project filter doesn't) ── */
   const monthsStarted = Math.min(F.fy==='all'?40:12, Math.max(1, series.filter(m => new Date(m.y, m.m, 1) <= now).length));
   const mip = F.month === 'all' ? monthsStarted : 1;   // salary months in period
-  const roster = normTeam().filter(e => e.status !== 'Exited');
+  const roster = dedupeRoster_(normTeam().filter(e => e.status !== 'Exited'));
   const rules = getRules();
   const rosterByName = {};
   roster.forEach(e => rosterByName[nrm(e.name)] = e);
@@ -1356,6 +1365,10 @@ function buildInsights(A) {
         out.push({ level:'warn', title:`Key-person risk: ${top.name} carries ${pct(top.bookings/P.bkAll)} of bookings`,
           body:`If they resign, get poached, or go on leave, the month's number goes with them. Pair them with a shadow, split walk-in allocation more evenly, and document what they do differently — then train it.` });
     }
+    const badRates = A.roster.filter(e => e.incPct > 50000);
+    if (badRates.length)
+      out.push({ level:'risk', title:`Check per-booking incentive for ${badRates.map(e=>e.name).join(', ')} — looks unusually high`,
+        body:`${badRates.map(e=>e.name+' is set to '+fmt(e.incPct)+'/booking').join(', ')} in the Team sheet. If your typical rate is closer to ₹5,000/booking, this is likely a stray digit or a leftover % value from before the incentive model was switched to a flat amount — worth a quick look.` });
     if (P.feeAll > 0 && P.peopleCost/P.feeAll > 0.5)
       out.push({ level: P.peopleCost/P.feeAll > 0.75 ? 'risk':'warn', title:'People cost is eating the fee',
         body:`Payroll + incentives are ${pct(P.peopleCost/P.feeAll)} of fee income (healthy is under ~45% for a sales mandate business). Either the team is overstaffed for current velocity, or bookings per head (${(P.bkAll/(A.roster.length*P.mip)).toFixed(1)}/month) needs to rise before headcount does.` });
@@ -1817,7 +1830,7 @@ function renderSimulator(A) {
       simCPB: Math.round((P.bkAll ? P.variableSelling/P.bkAll : 150000) / 1000) * 1000,
       simHead: A.roster.length || 8,
       simSalary: Math.round((A.roster.length ? A.roster.reduce((a,e)=>a+e.salary,0)/A.roster.length : 42000) / 500) * 500,
-      simInc: A.roster.length ? Number((A.roster.reduce((a,e)=>a+e.incPct,0)/A.roster.length).toFixed(2)) : 0.10,
+      simInc: A.roster.length ? Math.round(A.roster.reduce((a,e)=>a+e.incPct,0)/A.roster.length) : 5000,
       simCancel: 5,
       simOverhead: Math.round(((P.mktOverhead + P.otherCost) / P.mip) / 1000) * 1000
     }
@@ -1841,7 +1854,7 @@ function runSim() {
   const gdv = bk * ticket;
   const feeM = gdv * comm;
   const varM = bkGross * V('simCPB');            // marketing is spent on cancelled deals too
-  const peopleM = V('simHead') * V('simSalary') + gdv * V('simInc')/100;
+  const peopleM = V('simHead') * V('simSalary') + bkGross * V('simInc');
   const ohM = V('simOverhead');
   const profitM = feeM - varM - peopleM - ohM;
   const margin = feeM > 0 ? profitM / feeM : null;
@@ -1947,16 +1960,18 @@ function renderTeam(A) {
     else countUp(el, cards[i][1], cards[i][2]);
   });
 
-  $('tblTeam').innerHTML = `<tr><th>Name</th><th>Role</th><th>Site</th><th class="r">Bookings</th><th class="r">Sales value</th><th class="r">Fee generated</th><th class="r">Salary (period)</th><th class="r">Incentive</th><th class="r">Fee ÷ Cost</th><th class="r">Target</th></tr>` +
+  $('tblTeam').innerHTML = `<tr><th>Name</th><th>Role</th><th>Site</th><th class="r">Incentive/booking</th><th class="r">Bookings</th><th class="r">Sales value</th><th class="r">Fee generated</th><th class="r">Salary (period)</th><th class="r">Incentive</th><th class="r">Fee ÷ Cost</th><th class="r">Target</th></tr>` +
     (T.length ? T.map(t => {
       const roiPill = t.roi==null ? (t.onRoster?'–':'<span class="pill warn">not on roster</span>')
         : `<span class="pill ${t.roi>=3?'good':t.roi>=1.5?'warn':'risk'}">${t.roi.toFixed(1)}×</span>`;
       const tgt = t.targetAch==null ? '–' : `<span class="pill ${t.targetAch>=1?'good':t.targetAch>=0.7?'warn':'risk'}">${pct(t.targetAch)}</span>`;
+      const incPctFlag = t.onRoster && t.incPct > 50000 ? `<span class="pill risk">${fmt(t.incPct)} ⚠</span>` : (t.onRoster ? fmt(t.incPct) : '–');
       return `<tr><td>${esc(t.name)}</td><td>${esc(t.role)}</td><td>${esc(t.site)}</td>
+        <td class="r">${incPctFlag}</td>
         <td class="r num">${t.bookings}</td><td class="r num">${fmt(t.gdv)}</td><td class="r num">${fmt(t.fee)}</td>
         <td class="r num">${t.onRoster?fmt(t.salary*A.mip):'–'}</td><td class="r num">${fmt(t.incentive)}</td>
         <td class="r">${roiPill}</td><td class="r">${tgt}</td></tr>`;
-    }).join('') : '<tr><td colspan="10" class="empty">Add team members below — bookings match by sales person name</td></tr>');
+    }).join('') : '<tr><td colspan="11" class="empty">Add team members below — bookings match by sales person name</td></tr>');
 
   killChart('team');
   const top10 = T.filter(t=>t.fee>0 || t.cost>0).slice(0,10);
@@ -2382,7 +2397,7 @@ function refreshPayoutFields() {
   $('payRef').style.display = isRef ? '' : 'none';
   const personName = $('sPerson').value === '__other__' ? $('sPersonOther').value : $('sPerson').value;
   const emp = normTeam().find(e => nrm(e.name) === nrm(personName));
-  $('bkExecInc').placeholder = emp && av ? String(Math.round(av * emp.incPct/100)) : 'auto from roster rate';
+  $('bkExecInc').placeholder = emp ? String(Math.round(emp.incPct)) : 'auto from roster rate';
   $('bkBrokerage').placeholder = isCP && av ? String(Math.round(av * rules.cpBrokeragePct/100)) : 'auto from rule';
   $('bkCpInc').placeholder = isCP ? String(rules.cpTeamBonusPerBooking) : 'auto from rule';
   $('bkReferral').placeholder = isRef && av ? String(Math.round(av * rules.referralPayoutPct/100)) : 'auto from rule';
@@ -2410,12 +2425,12 @@ function demoData() {
   ];
   let seed = 42; const rnd = () => (seed = (seed*16807)%2147483647) / 2147483647;
   const team = [
-    { 'Employee ID':'EMP-0001','Name':'Rohit','Role':'Sales Head','Site':'Mangalam Midas City','Monthly Salary':65000,'Incentive % (of sale value)':0.10,'Monthly Booking Target':4,'Status':'Active' },
-    { 'Employee ID':'EMP-0002','Name':'Sneha','Role':'Sales Executive','Site':'Mangalam Myra','Monthly Salary':42000,'Incentive % (of sale value)':0.10,'Monthly Booking Target':3,'Status':'Active' },
-    { 'Employee ID':'EMP-0003','Name':'Amit','Role':'Sales Executive','Site':'Mangalam Momento','Monthly Salary':40000,'Incentive % (of sale value)':0.10,'Monthly Booking Target':3,'Status':'Active' },
-    { 'Employee ID':'EMP-0004','Name':'Pooja','Role':'Sales Executive','Site':'Mangalam Aikyam','Monthly Salary':40000,'Incentive % (of sale value)':0.10,'Monthly Booking Target':3,'Status':'Active' },
-    { 'Employee ID':'EMP-0005','Name':'Vikram','Role':'Sales Executive','Site':'Mangalam Midas City','Monthly Salary':38000,'Incentive % (of sale value)':0.10,'Monthly Booking Target':3,'Status':'Active' },
-    { 'Employee ID':'EMP-0006','Name':'Kiran','Role':'Sales Executive','Site':'Mangalam Myra','Monthly Salary':38000,'Incentive % (of sale value)':0.10,'Monthly Booking Target':2,'Status':'Active' },
+    { 'Employee ID':'EMP-0001','Name':'Rohit','Role':'Sales Head','Site':'Mangalam Midas City','Monthly Salary':65000,'Incentive % (of sale value)':5000,'Monthly Booking Target':4,'Status':'Active' },
+    { 'Employee ID':'EMP-0002','Name':'Sneha','Role':'Sales Executive','Site':'Mangalam Myra','Monthly Salary':42000,'Incentive % (of sale value)':5000,'Monthly Booking Target':3,'Status':'Active' },
+    { 'Employee ID':'EMP-0003','Name':'Amit','Role':'Sales Executive','Site':'Mangalam Momento','Monthly Salary':40000,'Incentive % (of sale value)':5000,'Monthly Booking Target':3,'Status':'Active' },
+    { 'Employee ID':'EMP-0004','Name':'Pooja','Role':'Sales Executive','Site':'Mangalam Aikyam','Monthly Salary':40000,'Incentive % (of sale value)':5000,'Monthly Booking Target':3,'Status':'Active' },
+    { 'Employee ID':'EMP-0005','Name':'Vikram','Role':'Sales Executive','Site':'Mangalam Midas City','Monthly Salary':38000,'Incentive % (of sale value)':5000,'Monthly Booking Target':3,'Status':'Active' },
+    { 'Employee ID':'EMP-0006','Name':'Kiran','Role':'Sales Executive','Site':'Mangalam Myra','Monthly Salary':38000,'Incentive % (of sale value)':5000,'Monthly Booking Target':2,'Status':'Active' },
     { 'Employee ID':'EMP-0007','Name':'Neha','Role':'Marketing','Site':'CENTRAL','Monthly Salary':55000,'Incentive % (of sale value)':0,'Monthly Booking Target':0,'Status':'Active' },
     { 'Employee ID':'EMP-0008','Name':'Sagar','Role':'CP Sourcing','Site':'CENTRAL','Monthly Salary':45000,'Incentive % (of sale value)':0,'Monthly Booking Target':0,'Status':'Active' }
   ];
