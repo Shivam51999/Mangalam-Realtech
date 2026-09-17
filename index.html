@@ -344,7 +344,7 @@ td.r,th.r{text-align:right}
           <div class="chartbox"><canvas id="chPnl"></canvas></div>
         </div>
       </div>
-      <p class="hint section">Company-wide view (project filter doesn't apply here). When the Team roster has active employees, payroll is computed automatically from the roster — don't also log salaries in Expenses or you'd count them twice. Incentives accrue automatically as a flat ₹ amount per booking (set per person below) — since the rate actually varies by site/campaign, type the specific amount into "Sales exec incentive" on the booking itself whenever it differs from that person's default.</p>
+      <p class="hint section">Company-wide view (project filter doesn't apply here). When the Team roster has active employees, payroll is computed automatically from the roster, prorated by joining/exit date — don't also log salaries in Expenses or you'd count them twice. Incentives accrue per each person's Incentive type: flat ₹ per booking, % of recovery (only once ≥80% of their recovery target is hit), or a manual monthly amount.</p>
     </section>
 
     <!-- ═══ TEAM ═══ -->
@@ -359,21 +359,52 @@ td.r,th.r{text-align:right}
         <div class="chartbox" style="height:300px"><canvas id="chTeam"></canvas></div>
       </div>
       <div class="card section">
+        <h3>Log a recovery — feeds the CRM incentive (% of recovery, ≥80% of target)</h3>
+        <div class="formgrid">
+          <div class="field"><label>Date</label><input type="date" id="rcDate"></div>
+          <div class="field"><label>CRM person</label><select id="rcPerson"></select></div>
+          <div class="field"><label>Booking ID (optional)</label><input id="rcBooking" placeholder="BK-0123"></div>
+          <div class="field"><label>Customer (optional)</label><input id="rcCustomer" placeholder="Customer name"></div>
+          <div class="field"><label>Amount recovered (₹)</label><input type="number" id="rcAmount" placeholder="500000"></div>
+        </div>
+        <div class="formfoot">
+          <button class="btn" id="saveRecovery">Log recovery</button>
+          <span class="hint">Sums per CRM person over the selected period and compares to their monthly recovery target (set on the Team member) to decide if the 80% gate is met.</span>
+        </div>
+        <div style="overflow-x:auto;margin-top:16px"><table id="tblRecovery"></table></div>
+      </div>
+      <div class="card section">
         <h3>Add team member</h3>
         <div class="formgrid">
           <div class="field"><label>Name</label><input id="tName" placeholder="Exactly as entered on bookings"></div>
           <div class="field"><label>Role</label><select id="tRole">
-            <option>Sales Executive</option><option>Sales Head</option><option>CRM Executive</option>
-            <option>Marketing</option><option>CP Sourcing</option><option>Other</option>
+            <optgroup label="Sales">
+              <option>GM Sales</option><option>Sales Manager</option><option>ASM</option><option>Sales Executive</option>
+            </optgroup>
+            <optgroup label="CRM">
+              <option>CRM Executive</option>
+            </optgroup>
+            <optgroup label="Marketing">
+              <option>GM Marketing</option><option>Digital Marketing</option><option>Graphic Designer</option><option>Video Editor</option><option>Tele Sales Executive</option>
+            </optgroup>
+            <option>CP Sourcing</option><option>Other</option>
           </select></div>
           <div class="field"><label>Site</label><select id="tSite"></select></div>
           <div class="field"><label>Monthly salary (₹)</label><input type="number" id="tSalary" placeholder="45000"></div>
-          <div class="field"><label>Incentive per booking (₹)</label><input type="number" id="tIncentive" step="500" placeholder="5000"></div>
+          <div class="field"><label>Joining date</label><input type="date" id="tJoinDate"></div>
+          <div class="field"><label>Exit date (leave blank if active)</label><input type="date" id="tExitDate"></div>
+          <div class="field"><label>Incentive type</label><select id="tIncentiveType">
+            <option value="Per Booking">Per booking (₹ flat)</option>
+            <option value="Recovery">% of recovery (paid only if ≥80% of target hit)</option>
+            <option value="Manual">Manual / fixed (₹ per month)</option>
+          </select></div>
+          <div class="field" id="fldIncValue"><label>Incentive per booking (₹)</label><input type="number" id="tIncentive" step="500" placeholder="5000"></div>
+          <div class="field" id="fldRecTarget" style="display:none"><label>Monthly recovery target (₹)</label><input type="number" id="tRecoveryTarget" step="10000" placeholder="e.g. 2000000"></div>
           <div class="field"><label>Monthly booking target</label><input type="number" id="tTarget" placeholder="3"></div>
         </div>
         <div class="formfoot">
           <button class="btn" id="saveEmployee">Add member</button>
-          <span class="hint">Name must match the "Sales person" typed on bookings — that's how fee credit and incentives are matched.</span>
+          <span class="hint">Name must match the "Sales person" typed on bookings (or the "CRM person" logged on a recovery) — that's how fee credit, incentives, and recovery are matched. Salary and target are prorated by joining/exit date automatically.</span>
         </div>
       </div>
     </section>
@@ -802,7 +833,7 @@ function bookingPayouts(s, rules, rosterByName) {
     cpInc:     s.cpInc     != null ? s.cpInc     : (cp ? rules.cpTeamBonusPerBooking : 0),
     referral:  s.refPay    != null ? s.refPay    : (rf ? s.value * rules.referralPayoutPct/100 : 0),
     walkin:    wi ? rules.walkInPayoutPerBooking : 0,
-    exec:      s.execInc   != null ? s.execInc   : (emp ? emp.incPct : 0)
+    exec:      s.execInc   != null ? s.execInc   : (emp && nrm(emp.incType) !== 'recovery' && nrm(emp.incType) !== 'manual' ? emp.incPct : 0)
   };
 }
 
@@ -875,6 +906,28 @@ function dedupeRoster_(roster) {
   return Object.values(byName);
 }
 
+/* Day-level salary proration: sums, across the given calendar months, the
+   fraction of each month actually worked between joinDate and exitDate
+   (inclusive). A month entirely before joining or after exit contributes 0;
+   a month spanning the join/exit date contributes a fraction; a fully
+   employed month contributes 1. Future months (not yet reached) contribute 0. */
+function proratedMonthsFor(joinDate, exitDate, monthsList, today) {
+  let total = 0;
+  monthsList.forEach(({ y, m }) => {
+    const monthStart = new Date(y, m, 1);
+    if (monthStart > today) return;
+    const daysInMonth = new Date(y, m + 1, 0).getDate();
+    const monthEnd = new Date(y, m, daysInMonth);
+    const capEnd = monthEnd > today ? today : monthEnd;
+    const empStart = (joinDate && joinDate > monthStart) ? joinDate : monthStart;
+    const empEnd = (exitDate && exitDate < capEnd) ? exitDate : capEnd;
+    if (empEnd < empStart) return;
+    const daysWorked = Math.floor((empEnd - empStart) / 86400000) + 1;
+    total += daysWorked / daysInMonth;
+  });
+  return total;
+}
+
 function normTeam() {
   return (DB.team || []).map(r => {
     const m = keymap(r);
@@ -885,10 +938,28 @@ function normTeam() {
       site: String(pick(m, 'site', 'project', 'location') || 'CENTRAL').trim(),
       salary: toNum(pick(m, 'monthly salary', 'salary', 'monthly ctc')),
       incPct: toNum(pick(m, 'incentive % (of sale value)', 'incentive %', 'incentive', 'incentive pct')),
+      incType: pick(m, 'incentive type') || 'Per Booking',
+      recoveryTarget: toNum(pick(m, 'recovery target (rs per month)', 'recovery target', 'monthly recovery target')),
       target: toNum(pick(m, 'monthly booking target', 'booking target', 'target')),
-      status: pick(m, 'status') || 'Active'
+      status: pick(m, 'status') || 'Active',
+      joinDate: toDate(pick(m, 'joining date', 'joined', 'date of joining', 'doj')),
+      exitDate: toDate(pick(m, 'exit date', 'last working day', 'lwd', 'relieving date'))
     };
   }).filter(e => e.name);
+}
+
+function normRecovery() {
+  return (DB.recoveries || []).map(r => {
+    const m = keymap(r);
+    return {
+      id: pick(m, 'recovery id', 'id') || '',
+      date: toDate(pick(m, 'date')),
+      person: String(pick(m, 'crm person', 'person', 'employee') || '').trim(),
+      bookingId: pick(m, 'booking id') || '',
+      customer: pick(m, 'customer') || '',
+      amount: toNum(pick(m, 'amount recovered', 'amount'))
+    };
+  }).filter(r => r.date && r.person);
 }
 
 /* ── filters ── */
@@ -915,6 +986,9 @@ function initFilters() {
     activeNames.map(n => `<option ${n===keepPerson?'selected':''}>${esc(n)}</option>`).join('') +
     `<option value="__other__" ${keepPerson==='__other__'?'selected':''}>Other (type name)</option>`;
   $('sPersonOther').style.display = perSel.value === '__other__' ? '' : 'none';
+  const rcSel = $('rcPerson'), keepRc = rcSel.value;
+  rcSel.innerHTML = '<option value="">— Select —</option>' +
+    activeNames.map(n => `<option ${n===keepRc?'selected':''}>${esc(n)}</option>`).join('');
   $('eScope').innerHTML = '<option>CENTRAL</option>' + projNames.map(p=>`<option>${esc(p)}</option>`).join('');
   $('tSite').innerHTML = '<option>CENTRAL</option>' + projNames.map(p=>`<option>${esc(p)}</option>`).join('');
   const bkProjSel = $('bkProjectFilter'), keepBkProj = bkProjSel.value || 'all';
@@ -923,7 +997,7 @@ function initFilters() {
   budSel.innerHTML = '<option value="ALL">Company-wide</option>' + projNames.map(p=>`<option ${p===keep?'selected':''}>${esc(p)}</option>`).join('');
   if (keep === 'ALL') budSel.value = 'ALL';
   $('eCategory').innerHTML = (DB.expenseCategories||[]).map(c=>`<option>${esc(c.category)}</option>`).join('');
-  $('sDate').valueAsDate = new Date(); $('eDate').valueAsDate = new Date();
+  $('sDate').valueAsDate = new Date(); $('eDate').valueAsDate = new Date(); $('rcDate').valueAsDate = new Date();
 }
 
 function inRange(d) {
@@ -1099,7 +1173,8 @@ function analyse() {
 
   /* ── PEOPLE & P&L (company-wide: FY + month filters apply, project filter doesn't) ── */
   const monthsStarted = Math.min(F.fy==='all'?40:12, Math.max(1, series.filter(m => new Date(m.y, m.m, 1) <= now).length));
-  const mip = F.month === 'all' ? monthsStarted : 1;   // salary months in period
+  const mip = F.month === 'all' ? monthsStarted : 1;   // salary months in period (company-wide averages only)
+  const periodMonths = (F.fy !== 'all' && F.month !== 'all') ? [months[Number(F.month)]] : months;
   const roster = dedupeRoster_(normTeam().filter(e => e.status !== 'Exited'));
   const rules = getRules();
   const rosterByName = {};
@@ -1113,23 +1188,42 @@ function analyse() {
     o.pay += bookingPayouts(s, rules, rosterByName).exec;   // row-level incentive wins, else roster rate
   });
 
+  const recByPerson = {};
+  normRecovery().filter(r => inRange(r.date)).forEach(r => {
+    const k = r.person.trim().toLowerCase(); if (!k) return;
+    recByPerson[k] = (recByPerson[k] || 0) + r.amount;
+  });
+
   const team = roster.map(e => {
     const st = byPerson[e.name.toLowerCase()] || { bookings:0, gdv:0, fee:0, pay:0 };
-    const incentive = st.pay;
-    const cost = e.salary * mip + incentive;
-    return { ...e, bookings: st.bookings, gdv: st.gdv, fee: st.fee, incentive, cost,
-      roi: cost > 0 ? st.fee / cost : null,
-      targetAch: e.target > 0 ? st.bookings / (e.target * mip) : null, onRoster: true };
+    const empMonths = proratedMonthsFor(e.joinDate, e.exitDate, periodMonths, now);
+    const recovered = recByPerson[e.name.toLowerCase()] || 0;
+    const type = nrm(e.incType);
+    let incentive, targetAch, recoveryTargetForPeriod = null;
+    if (type === 'recovery') {
+      recoveryTargetForPeriod = e.recoveryTarget * empMonths;
+      incentive = (recoveryTargetForPeriod > 0 && recovered >= recoveryTargetForPeriod * 0.8) ? recovered * (e.incPct/100) : 0;
+      targetAch = recoveryTargetForPeriod > 0 ? recovered / recoveryTargetForPeriod : null;
+    } else if (type === 'manual') {
+      incentive = e.incPct * empMonths;
+      targetAch = e.target > 0 ? st.bookings / (e.target * empMonths) : null;
+    } else {
+      incentive = st.pay;
+      targetAch = e.target > 0 ? st.bookings / (e.target * empMonths) : null;
+    }
+    const cost = e.salary * empMonths + incentive;
+    return { ...e, bookings: st.bookings, gdv: st.gdv, fee: st.fee, incentive, cost, empMonths, recovered, recoveryTargetForPeriod,
+      roi: cost > 0 ? st.fee / cost : null, targetAch, onRoster: true };
   });
   Object.entries(byPerson).forEach(([k, st]) => {
     if (!roster.some(e => e.name.toLowerCase() === k))
-      team.push({ name: st.display, role: '—', site: '—', salary: 0, incPct: 0, target: 0,
+      team.push({ name: st.display, role: '—', site: '—', salary: 0, incPct: 0, incType: 'Per Booking', target: 0, empMonths: 0, recovered: 0,
         bookings: st.bookings, gdv: st.gdv, fee: st.fee, incentive: st.pay, cost: st.pay,
         roi: null, targetAch: null, onRoster: false });
   });
   team.sort((a,b) => b.fee - a.fee);
 
-  const payroll = roster.reduce((a,e) => a + e.salary * mip, 0);
+  const payroll = team.filter(t=>t.onRoster).reduce((a,t) => a + t.salary * t.empMonths, 0);
   const incentiveTotal = team.reduce((a,t) => a + t.incentive, 0);
 
   const catAmt = {};
@@ -1365,7 +1459,7 @@ function buildInsights(A) {
         out.push({ level:'warn', title:`Key-person risk: ${top.name} carries ${pct(top.bookings/P.bkAll)} of bookings`,
           body:`If they resign, get poached, or go on leave, the month's number goes with them. Pair them with a shadow, split walk-in allocation more evenly, and document what they do differently — then train it.` });
     }
-    const badRates = A.roster.filter(e => e.incPct > 50000);
+    const badRates = A.roster.filter(e => nrm(e.incType) !== 'recovery' && nrm(e.incType) !== 'manual' && e.incPct > 50000);
     if (badRates.length)
       out.push({ level:'risk', title:`Check per-booking incentive for ${badRates.map(e=>e.name).join(', ')} — looks unusually high`,
         body:`${badRates.map(e=>e.name+' is set to '+fmt(e.incPct)+'/booking').join(', ')} in the Team sheet. If your typical rate is closer to ₹5,000/booking, this is likely a stray digit or a leftover % value from before the incentive model was switched to a flat amount — worth a quick look.` });
@@ -1830,7 +1924,8 @@ function renderSimulator(A) {
       simCPB: Math.round((P.bkAll ? P.variableSelling/P.bkAll : 150000) / 1000) * 1000,
       simHead: A.roster.length || 8,
       simSalary: Math.round((A.roster.length ? A.roster.reduce((a,e)=>a+e.salary,0)/A.roster.length : 42000) / 500) * 500,
-      simInc: A.roster.length ? Math.round(A.roster.reduce((a,e)=>a+e.incPct,0)/A.roster.length) : 5000,
+      simInc: (() => { const pb = A.roster.filter(e => nrm(e.incType) !== 'recovery' && nrm(e.incType) !== 'manual');
+        return pb.length ? Math.round(pb.reduce((a,e)=>a+e.incPct,0)/pb.length) : 5000; })(),
       simCancel: 5,
       simOverhead: Math.round(((P.mktOverhead + P.otherCost) / P.mip) / 1000) * 1000
     }
@@ -1950,7 +2045,7 @@ function renderTeam(A) {
   const cards = [
     ['Top performer', null, ()=> top ? esc(top.name) : '–', top? fmt(top.fee)+' fee · '+top.bookings+' bookings' : 'no bookings in period', null, '#F0BC52'],
     ['Payroll % of fee', P.feeAll?P.payroll/P.feeAll:null, v=>v==null||!isFinite(v)?'–':pct(v), fmt(P.payroll)+' over '+P.mip+' month'+(P.mip>1?'s':''), null, '#A18BFF'],
-    ['Incentive accrued', P.incentiveTotal, fmt, 'auto: sale value × incentive rate', null, '#3CE4A4'],
+    ['Incentive accrued', P.incentiveTotal, fmt, 'per booking / % of recovery / manual, by type', null, '#3CE4A4'],
     ['Bookings per head / month', A.roster.length? P.bkAll/(A.roster.length*P.mip) : null, v=>v==null||!isFinite(v)?'–':v.toFixed(1), 'sales productivity', null, '#5BE3FF']
   ];
   $('teamCards').innerHTML = cards.map(([l,,,d]) =>
@@ -1960,18 +2055,25 @@ function renderTeam(A) {
     else countUp(el, cards[i][1], cards[i][2]);
   });
 
-  $('tblTeam').innerHTML = `<tr><th>Name</th><th>Role</th><th>Site</th><th class="r">Incentive/booking</th><th class="r">Bookings</th><th class="r">Sales value</th><th class="r">Fee generated</th><th class="r">Salary (period)</th><th class="r">Incentive</th><th class="r">Fee ÷ Cost</th><th class="r">Target</th></tr>` +
+  $('tblTeam').innerHTML = `<tr><th>Name</th><th>Role</th><th>Site</th><th>Incentive type</th><th class="r">Incentive value</th><th class="r">Bookings</th><th class="r">Sales value</th><th class="r">Fee generated</th><th class="r">Recovered</th><th class="r">Salary (period)</th><th class="r">Incentive</th><th class="r">Fee ÷ Cost</th><th class="r">Target</th></tr>` +
     (T.length ? T.map(t => {
       const roiPill = t.roi==null ? (t.onRoster?'–':'<span class="pill warn">not on roster</span>')
         : `<span class="pill ${t.roi>=3?'good':t.roi>=1.5?'warn':'risk'}">${t.roi.toFixed(1)}×</span>`;
       const tgt = t.targetAch==null ? '–' : `<span class="pill ${t.targetAch>=1?'good':t.targetAch>=0.7?'warn':'risk'}">${pct(t.targetAch)}</span>`;
-      const incPctFlag = t.onRoster && t.incPct > 50000 ? `<span class="pill risk">${fmt(t.incPct)} ⚠</span>` : (t.onRoster ? fmt(t.incPct) : '–');
+      const type = nrm(t.incType);
+      const typeLabel = type==='recovery' ? 'Recovery %' : type==='manual' ? 'Manual' : 'Per booking';
+      const incValue = !t.onRoster ? '–'
+        : type==='recovery' ? `${t.incPct}%` + (t.incPct>25 ? ' ⚠' : '')
+        : type==='manual' ? fmt(t.incPct)+'/mo'
+        : (t.incPct > 50000 ? `<span class="pill risk">${fmt(t.incPct)} ⚠</span>` : fmt(t.incPct));
+      const recovered = t.onRoster && type==='recovery' ? fmt(t.recovered) : '–';
       return `<tr><td>${esc(t.name)}</td><td>${esc(t.role)}</td><td>${esc(t.site)}</td>
-        <td class="r">${incPctFlag}</td>
+        <td>${typeLabel}</td><td class="r">${incValue}</td>
         <td class="r num">${t.bookings}</td><td class="r num">${fmt(t.gdv)}</td><td class="r num">${fmt(t.fee)}</td>
-        <td class="r num">${t.onRoster?fmt(t.salary*A.mip):'–'}</td><td class="r num">${fmt(t.incentive)}</td>
+        <td class="r num">${recovered}</td>
+        <td class="r num">${t.onRoster?fmt(t.salary*t.empMonths):'–'}</td><td class="r num">${fmt(t.incentive)}</td>
         <td class="r">${roiPill}</td><td class="r">${tgt}</td></tr>`;
-    }).join('') : '<tr><td colspan="11" class="empty">Add team members below — bookings match by sales person name</td></tr>');
+    }).join('') : '<tr><td colspan="13" class="empty">Add team members below — bookings match by sales person name</td></tr>');
 
   killChart('team');
   const top10 = T.filter(t=>t.fee>0 || t.cost>0).slice(0,10);
@@ -1988,6 +2090,18 @@ function renderTeam(A) {
           callbacks:{label:c=>' '+c.dataset.label+': '+fmt(c.raw)} } },
       scales:{ x:{ ticks:{ callback:v=>fmt(v), font:{family:"'JetBrains Mono', monospace", size:10} } }, y:{ grid:{display:false} } } }
   });
+  renderRecoveryList(A);
+}
+
+function renderRecoveryList(A) {
+  const tbl = $('tblRecovery');
+  if (!tbl) return;
+  const rows = normRecovery().filter(r => inRange(r.date)).sort((a,b) => b.date - a.date).slice(0, 60);
+  if (!rows.length) { tbl.innerHTML = '<tr><td class="empty">No recoveries logged in this period.</td></tr>'; return; }
+  tbl.innerHTML = `<tr><th>Date</th><th>CRM person</th><th>Booking</th><th>Customer</th><th class="r">Amount recovered</th></tr>` +
+    rows.map(r => `<tr><td class="num">${r.date.toISOString().slice(0,10)}</td><td>${esc(r.person)}</td>
+      <td class="num">${esc(r.bookingId)||'–'}</td><td>${esc(r.customer)||'–'}</td>
+      <td class="r num">${fmt(r.amount)}</td></tr>`).join('');
 }
 
 let sparkSeq = 0;
@@ -2357,10 +2471,32 @@ $('saveProject').onclick = function() {
 
 $('saveEmployee').onclick = function() {
   const p = { action:'addEmployee', name:$('tName').value.trim(), role:$('tRole').value, site:$('tSite').value,
-    salary:$('tSalary').value, incentivePct:$('tIncentive').value, bookingTarget:$('tTarget').value };
+    salary:$('tSalary').value, incentivePct:$('tIncentive').value, bookingTarget:$('tTarget').value,
+    incentiveType:$('tIncentiveType').value, recoveryTarget:$('tRecoveryTarget').value,
+    joiningDate:$('tJoinDate').value, exitDate:$('tExitDate').value };
   if (!p.name) return toast('Name is required');
   submit(this, p, () => (DB.team = DB.team || []).push({ 'Employee ID':'EMP-DEMO','Name':p.name,'Role':p.role,'Site':p.site,
-    'Monthly Salary':p.salary,'Incentive % (of sale value)':p.incentivePct,'Monthly Booking Target':p.bookingTarget,'Status':'Active' }));
+    'Monthly Salary':p.salary,'Incentive % (of sale value)':p.incentivePct,'Incentive Type':p.incentiveType,
+    'Recovery Target (Rs per month)':p.recoveryTarget,'Monthly Booking Target':p.bookingTarget,'Status':'Active',
+    'Joining Date':p.joiningDate,'Exit Date':p.exitDate }));
+};
+function toggleIncentiveFields() {
+  const type = $('tIncentiveType').value;
+  const lbl = $('fldIncValue').querySelector('label');
+  $('fldRecTarget').style.display = type === 'Recovery' ? '' : 'none';
+  lbl.textContent = type === 'Recovery' ? 'Incentive (% of recovered amount)'
+    : type === 'Manual' ? 'Incentive (₹ per month)' : 'Incentive per booking (₹)';
+  $('tIncentive').placeholder = type === 'Recovery' ? '0.04' : type === 'Manual' ? '10000' : '5000';
+}
+$('tIncentiveType').addEventListener('change', toggleIncentiveFields);
+toggleIncentiveFields();
+
+$('saveRecovery').onclick = function() {
+  const p = { action:'addRecovery', date:$('rcDate').value, person:$('rcPerson').value,
+    bookingId:$('rcBooking').value, customer:$('rcCustomer').value, amount:$('rcAmount').value };
+  if (!p.date || !p.person || !p.amount) return toast('Date, CRM person and amount are required');
+  submit(this, p, () => (DB.recoveries = DB.recoveries || []).push({ 'Recovery ID':'REC-DEMO','Date':p.date,'CRM Person':p.person,
+    'Booking ID':p.bookingId,'Customer':p.customer,'Amount Recovered':p.amount }));
 };
 
 /* ════════════════ NAV & FILTERS ════════════════ */
@@ -2397,7 +2533,7 @@ function refreshPayoutFields() {
   $('payRef').style.display = isRef ? '' : 'none';
   const personName = $('sPerson').value === '__other__' ? $('sPersonOther').value : $('sPerson').value;
   const emp = normTeam().find(e => nrm(e.name) === nrm(personName));
-  $('bkExecInc').placeholder = emp ? String(Math.round(emp.incPct)) : 'auto from roster rate';
+  $('bkExecInc').placeholder = (emp && nrm(emp.incType) !== 'recovery' && nrm(emp.incType) !== 'manual') ? String(Math.round(emp.incPct)) : 'auto from roster rate';
   $('bkBrokerage').placeholder = isCP && av ? String(Math.round(av * rules.cpBrokeragePct/100)) : 'auto from rule';
   $('bkCpInc').placeholder = isCP ? String(rules.cpTeamBonusPerBooking) : 'auto from rule';
   $('bkReferral').placeholder = isRef && av ? String(Math.round(av * rules.referralPayoutPct/100)) : 'auto from rule';
