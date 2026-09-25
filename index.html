@@ -322,7 +322,7 @@ td.r,th.r{text-align:right}
       <div class="card section">
         <h3>Site P&amp;L — with central cost allocated by area, ongoing sites only</h3>
         <div style="overflow-x:auto"><table id="tblSite"></table></div>
-        <p class="hint" style="margin-top:10px">Revenue = agreement value × the project's commission rate (per-project, editable in the Projects tab below). Central marketing &amp; CP-sourcing costs are spread only across sites marked <b>Active</b> (see Status below — that's how the system knows a site is "ongoing"), proportional to each site's Total area (sqft). A site marked Upcoming or Completed shows ₹0 allocated — it isn't sharing the current central cost. An Active site with no area set gets ₹0 share of its own (0 ÷ total area) unless none of the Active sites have an area set yet, in which case the cost splits equally among them as a placeholder — so fill in Total area for every live site to get a true area-proportional split.</p>
+        <p class="hint" style="margin-top:10px">Revenue = agreement value × the project's commission rate (per-project, editable in the Projects tab below). Central marketing &amp; CP-sourcing costs are spread only across sites marked <b>Active</b> (see Status below — that's how the system knows a site is "ongoing"), proportional to each site's Total area (sqft). A site marked Upcoming or Completed shows ₹0 allocated — it isn't sharing the current central cost. An Active site with no area set gets ₹0 share of its own (0 ÷ total area) unless none of the Active sites have an area set yet, in which case the cost splits equally among them as a placeholder — so fill in Total area for every live site to get a true area-proportional split. <b>Salary is added automatically</b> from the Team sheet (monthly salary × months worked): staff whose Site is a project count in that project's Direct spend; CENTRAL staff join the central pool. Hand-logged salary expenses are ignored so nothing is counted twice.</p>
       </div>
 
       <div class="card section">
@@ -434,7 +434,7 @@ td.r,th.r{text-align:right}
         <h3 style="justify-content:space-between"><span style="display:flex;align-items:center;gap:9px"><span></span>Budget vs actual — sources · salary · incentives</span>
           <select id="budScope" style="font-size:12px;padding:6px 11px"><option value="ALL">Company-wide</option></select></h3>
         <div style="overflow-x:auto"><table id="tblBudget"></table></div>
-        <p class="hint" style="margin-top:10px">"Suggested" is what the system estimates each head actually needs at your current run-rate: per-booking cost rules × booking velocity for variable heads, roster payroll for salaries, accrued incentives for the team. Type a budget and press Save — utilization and overrun projections update against it.</p>
+        <p class="hint" id="budHint" style="margin-top:10px">"Suggested" is what the system estimates each head actually needs at your current run-rate: per-booking cost rules × booking velocity for variable heads, roster payroll for salaries, accrued incentives for the team. Type a budget and press Save — utilization and overrun projections update against it.</p>
       </div>
       <div class="grid two section">
         <div class="card">
@@ -836,7 +836,8 @@ function normBudgets() {
     const m = keymap(row);
     const cat = String(pick(m, 'category', 'head') || '').trim();
     const scope = String(pick(m, 'scope', 'project') || 'ALL').trim() || 'ALL';
-    if (cat) b[nkey(scope) + '|' + nkey(cat)] = { name: cat, scope, amount: toNum(pick(m, 'monthly budget', 'budget', 'amount')) };
+    if (cat) b[nkey(scope) + '|' + nkey(cat)] = { name: cat, scope, amount: toNum(pick(m, 'monthly budget', 'budget', 'amount')),
+      total: toNum(pick(m, 'total budget (project life)', 'total budget', 'project budget', 'lifetime budget')) };
   });
   return b;
 }
@@ -913,6 +914,60 @@ function normExpenses() {
       source: map[nkey(category)] || 'Other'
     };
   }).filter(e => e.date && e.amount > 0);
+}
+
+/* ── AUTO SALARY ──
+   Salary is recurring, so nobody logs it by hand. The system builds it from
+   the Team sheet: for every person with a Monthly Salary, one salary line per
+   calendar month from Joining Date (blank → start of the current FY) up to
+   today or Exit Date, prorated by days worked. It lands on the person's Site:
+   a project name → that project's direct spend; CENTRAL (or a site name that
+   doesn't match any project) → central pool, shared across Active sites by
+   area. While this is on, hand-logged salary expenses are ignored so nothing
+   is counted twice. Updates itself every day — nothing to enter. */
+const SALARY_CATS = ['Sales Team Salary', 'Marketing Team Salary', 'CP Team Salary'];
+function salaryCatFor(role) {
+  const r = nrm(role);
+  if (/market|digital|social|content|design/.test(r)) return 'Marketing Team Salary';
+  if (/\bcp\b|channel|sourcing/.test(r)) return 'CP Team Salary';
+  return 'Sales Team Salary';
+}
+function autoSalaryExpenses() {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const people = dedupeRoster_(normTeam()).filter(e => e.salary > 0);
+  if (!people.length) return [];
+  const fyStartDefault = new Date(fyOf(today), 3, 1);
+  const projByKey = {}; PJ().forEach(p => projByKey[nrm(p.name)] = p.name);
+  const srcMap = {}; (DB.expenseCategories || []).forEach(c => srcMap[nkey(c.category)] = c.source);
+  const out = [];
+  people.forEach(e => {
+    if (nrm(e.status) === 'exited' && !e.exitDate) return;   // exited with no exit date → can't know when pay stopped
+    const start = e.joinDate || fyStartDefault;
+    const end = (e.exitDate && e.exitDate < today) ? e.exitDate : today;
+    if (end < start) return;
+    const scope = projByKey[nrm(e.site)] || 'CENTRAL';
+    const category = salaryCatFor(e.role);
+    let y = start.getFullYear(), m = start.getMonth();
+    while (new Date(y, m, 1) <= end) {
+      const frac = proratedMonthsFor(start, e.exitDate, [{ y, m }], today);
+      if (frac > 0) {
+        const d = new Date(y, m, 1);
+        out.push({ id: 'AUTO-SAL', date: d < start ? start : d, scope, category,
+          desc: 'Auto salary · ' + e.name, amount: Math.round(e.salary * frac),
+          source: srcMap[nkey(category)] || 'Sales Overhead', auto: true, person: e.name });
+      }
+      m++; if (m === 12) { m = 0; y++; }
+    }
+  });
+  return out;
+}
+/* Logged expenses + auto salary (hand-logged salary lines dropped when auto is on). */
+function allExpenses() {
+  const logged = normExpenses();
+  const auto = autoSalaryExpenses();
+  if (!auto.length) return logged;
+  const salKeys = SALARY_CATS.map(nkey);
+  return logged.filter(e => salKeys.indexOf(nkey(e.category)) === -1).concat(auto);
 }
 
 /* Guards against a duplicated name in the Team sheet double-counting someone's
@@ -1068,7 +1123,7 @@ function inRange(d) {
 const MONTHS_CAL = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 function analyse() {
   const now = new Date();
-  const allSales = normSales(), allExps = normExpenses();
+  const allSales = normSales(), allExps = allExpenses();   // logged + auto salary
   const projFilter = s => F.project === 'all' || nrm(s) === nrm(F.project);
 
   // period slices (FY + month filter)
@@ -1336,6 +1391,10 @@ function analyse() {
   // budget context — renderBudget slices this per scope (company-wide or one project)
   const budCtx = { exps, active, tokens: tokenRows, roster, rules, rosterByName, mip, rosterMode, loggedSalaries };
   const budgetRows = budgetRowsFor(budCtx, 'ALL');
+  // project-life context — ignores FY/month filters: everything since the project started
+  const lifeCtx = { exps: allExps, rules, rosterByName,
+    active: allSales.filter(s => s.status !== 'Cancelled' && s.status !== 'Token'),
+    tokens: allSales.filter(s => s.status === 'Token') };
   const budTotal = budgetRows.reduce((a,r) => a + r.budget, 0);
   const budActual = budgetRows.reduce((a,r) => a + r.actual, 0);
 
@@ -1343,7 +1402,7 @@ function analyse() {
     bySource, overheads, sites, series, pacing, elapsed, fc, activeMonths,
     fyToDateFee, fcFyTotal, health, centralTotal, team, roster, pnl, mip,
     rules, tokensView, tokensAll: tokenRows, tokenFeePotential, accr, payables,
-    budCtx, budgetRows, budTotal, budActual };
+    budCtx, budgetRows, budTotal, budActual, lifeCtx };
 }
 
 /* ── scoped budget rows: scope = 'ALL' (company) or a project name ── */
@@ -1384,6 +1443,49 @@ function budgetRowsFor(C, scope) {
     const b = bud(name);
     return { name, budget: b, actual, suggested, util: b > 0 ? actual / b : null };
   });
+}
+
+/* ── project-life budget: ONE fixed budget per head for the whole project,
+   compared with everything spent on it since it started (FY/month filters
+   don't apply). Salary comes from auto salary of staff whose Site = project. */
+function projectLifeRows(L, scope) {
+  const ex = L.exps.filter(e => nrm(e.scope) === nrm(scope));
+  const catAmt = {}; ex.forEach(e => catAmt[nkey(e.category)] = (catAmt[nkey(e.category)] || 0) + e.amount);
+  const cat = n => catAmt[nkey(n)] || 0;
+  const bks = L.active.filter(s => nrm(s.project) === nrm(scope));
+  const toks = L.tokens.filter(s => nrm(s.project) === nrm(scope));
+  const pay = bks.reduce((a, s) => {
+    const p = bookingPayouts(s, L.rules, L.rosterByName);
+    a.brokerage += p.brokerage; a.cpBonus += p.cpInc; a.walkin += p.walkin; a.referral += p.referral; a.exec += p.exec;
+    return a;
+  }, { brokerage:0, cpBonus:0, walkin:0, referral:0, exec:0 });
+  const tokenAcc = toks.length * L.rules.tokenBonusPerToken;
+  const salary = SALARY_CATS.reduce((a, c) => a + cat(c), 0);
+  // how long the project has been live: first booking / token / expense → today
+  const dates = [...ex, ...bks, ...toks].map(x => x.date).filter(Boolean);
+  const start = dates.length ? new Date(Math.min.apply(null, dates)) : null;
+  const monthsLive = start ? Math.max(1, (new Date() - start) / (86400000 * 30.44)) : 1;
+  const budgets = normBudgets();
+  const bud = name => { const b = budgets[nkey(scope) + '|' + nkey(name)]; return b ? b.total : 0; };
+  const heads = [
+    ['Hoarding & Outdoor',   cat('Hoarding & Outdoor')],
+    ['Digital Marketing',    cat('Digital Marketing')],
+    ['CP Brokerage',         Math.max(cat('CP Brokerage'), pay.brokerage)],
+    ['CP Bonus',             Math.max(cat('CP Bonus'), pay.cpBonus)],
+    ['Walk-in Payout',       Math.max(cat('Walk-in Payout'), pay.walkin)],
+    ['Referral Payout',      Math.max(cat('Referral Payout'), pay.referral)],
+    ['Token Bonus',          Math.max(cat('Token Bonus'), tokenAcc)],
+    ['Events & Activations', cat('Events & Activations')],
+    ['Collaterals & Print',  cat('Collaterals & Print')],
+    ['Other',                cat('Other')],
+    ['Payroll',              salary],
+    ['Incentives',           pay.exec]
+  ];
+  const rows = heads.map(([name, actual]) => {
+    const b = bud(name);
+    return { name, budget: b, actual, remaining: b - actual, perMonth: actual / monthsLive, util: b > 0 ? actual / b : null };
+  });
+  return { rows, start, monthsLive };
 }
 
 function forecast(ys, n) {
@@ -1804,7 +1906,10 @@ function printInvoice(bookingId) {
 function renderBudget(A) {
   window.__A = A;
   const scope = ($('budScope') && $('budScope').value) || 'ALL';
-  const rows = scope === 'ALL' ? A.budgetRows : budgetRowsFor(A.budCtx, scope);
+  if (!window.__budHintCompany) window.__budHintCompany = $('budHint').innerHTML;
+  if (scope !== 'ALL') { renderProjectLifeBudget(A, scope); renderRulesAndPayables(A); return; }
+  $('budHint').innerHTML = window.__budHintCompany;
+  const rows = A.budgetRows;
   const over = rows.filter(r => r.util != null && r.util > 1).length;
   const withB = rows.filter(r => r.budget > 0);
   const budTotal = rows.reduce((a,r)=>a+r.budget,0), budActual = rows.reduce((a,r)=>a+r.actual,0);
@@ -1831,7 +1936,10 @@ function renderBudget(A) {
         <td class="r"><input type="number" id="bud_${i}" value="${Math.round(r.budget)||''}" placeholder="${Math.round(r.suggested)}" style="width:110px;padding:6px 9px;font-size:12px">
         <button class="btn ghost" style="padding:5px 11px;font-size:11.5px;margin-left:5px" onclick="saveBudget('${esc(r.name)}','bud_${i}','${esc(scope)}')">Save</button></td></tr>`;
     }).join('');
+  renderRulesAndPayables(A);
+}
 
+function renderRulesAndPayables(A) {
   $('tblRules').innerHTML = `<tr><th>Rule</th><th class="r">Value</th><th>Applies to</th><th class="r" style="min-width:170px">Update</th></tr>` +
     RULE_META.map(([key, label, desc, unit], i) =>
       `<tr><td>${label}</td><td class="r num">${A.rules[key]}${unit==='%'?'%':''}</td>
@@ -1846,20 +1954,59 @@ function renderBudget(A) {
        <td class="r num">${fmt(A.payables.reduce((a,p)=>a+p.paid,0))}</td>
        <td class="r num">${fmt(A.payables.reduce((a,p)=>a+p.outstanding,0))}</td></tr>`;
 }
-async function saveBudget(category, inputId, scope) {
+function renderProjectLifeBudget(A, scope) {
+  const L = projectLifeRows(A.lifeCtx, scope);
+  const rows = L.rows;
+  const budTotal = rows.reduce((a,r)=>a+r.budget,0), spent = rows.reduce((a,r)=>a+r.actual,0);
+  const withB = rows.filter(r => r.budget > 0);
+  const over = rows.filter(r => r.util != null && r.util > 1).length;
+  const burn = spent / L.monthsLive;
+  const runway = budTotal > 0 && burn > 0 ? Math.max(0, budTotal - spent) / burn : null;
+  const since = L.start ? 'since ' + L.start.toLocaleDateString('en-IN', { month:'short', year:'numeric' }) : 'no activity yet';
+  const cards = [
+    ['Project budget (total, fixed)', budTotal, fmt, withB.length + ' heads budgeted · ' + scope, null, '#F0BC52'],
+    ['Spent to date', spent, fmt, since + ' · salary auto-added', null, '#5BE3FF'],
+    ['Remaining', budTotal - spent, fmt, budTotal>0 ? (spent<=budTotal ? 'left in the project budget' : 'over the project budget') : 'set budgets below', null, spent<=budTotal?'#3CE4A4':'#FF6F62', spent<=budTotal?'up':'down'],
+    ['Utilization', budTotal>0 ? spent/budTotal : null, v=>v==null||!isFinite(v)?'–':pct(v), budTotal>0 ? 'of total project budget' : 'set budgets below', null, spent<=budTotal?'#3CE4A4':'#FF6F62'],
+    ['Budget runway', runway, v=>v==null||!isFinite(v)?'–':v.toFixed(1)+' mo', 'at avg burn of ' + fmt(burn) + '/month', null, '#A18BFF'],
+    ['Heads over budget', over, v=>v==null?'–':Math.round(v)+'', 'of ' + withB.length + ' budgeted heads', null, over?'#FF6F62':'#3CE4A4']
+  ];
+  $('budCards').innerHTML = cards.map(([l,,,d,,,cls]) =>
+    `<div class="card kpi"><div class="lbl">${l}</div><div class="val num">–</div><div class="delta ${cls||'flat'}">${d}</div></div>`).join('');
+  document.querySelectorAll('#budCards .val').forEach((el,i) => countUp(el, cards[i][1], cards[i][2]));
+
+  $('tblBudget').innerHTML = `<tr><th>Head</th><th class="r">Total budget (project life)</th><th class="r">Spent to date</th><th class="r">Remaining</th><th class="r">Utilization</th><th class="r">Avg / month</th><th class="r" style="min-width:200px">Set total budget</th></tr>` +
+    rows.map((r,i) => {
+      const util = r.util==null ? '<span class="pill warn">no budget</span>'
+        : `<span class="pill ${r.util<=0.9?'good':r.util<=1.05?'warn':'risk'}">${pct(r.util)}</span>`;
+      return `<tr><td>${esc(r.name)}</td><td class="r num">${r.budget>0?fmt(r.budget):'–'}</td>
+        <td class="r num">${fmt(r.actual)}</td>
+        <td class="r num" style="color:${r.budget<=0?'var(--muted)':r.remaining>=0?'var(--jade)':'var(--ember)'}">${r.budget>0?fmt(r.remaining):'–'}</td>
+        <td class="r">${util}</td><td class="r num" style="color:var(--cyan)">${fmt(r.perMonth)}</td>
+        <td class="r"><input type="number" id="bud_${i}" value="${Math.round(r.budget)||''}" placeholder="total ₹" style="width:120px;padding:6px 9px;font-size:12px">
+        <button class="btn ghost" style="padding:5px 11px;font-size:11.5px;margin-left:5px" onclick="saveBudget('${esc(r.name)}','bud_${i}','${esc(scope)}','total')">Save</button></td></tr>`;
+    }).join('');
+  $('budHint').innerHTML = `<b>Project view = one fixed budget for the whole life of ${esc(scope)}</b>, not per month. "Spent to date" counts everything since the project's first booking or expense — the FY/month filters at the top don't apply here. Per-booking costs (brokerage, bonuses, incentives) are accrued from bookings; <b>Payroll is added automatically</b> from the Team sheet for everyone whose Site is ${esc(scope)} (monthly salary × months worked, from Joining Date). Central costs are not included here — they sit in the company-wide budget. Runway = remaining budget ÷ average monthly spend so far.`;
+}
+
+async function saveBudget(category, inputId, scope, type) {
   const v = Number($(inputId).value) || 0;
   scope = scope || 'ALL';
+  const isTotal = type === 'total';
+  const col = isTotal ? 'Total Budget (Project Life)' : 'Monthly Budget';
   try {
     if (CONFIG.API_URL) {
-      const r = await apiPost({ action:'setBudget', category, scope, monthlyBudget: v });
+      const r = await apiPost(isTotal
+        ? { action:'setBudget', category, scope, budgetType:'total', totalBudget: v }
+        : { action:'setBudget', category, scope, monthlyBudget: v });
       if (r.error) throw new Error(r.error);
       const d = await apiGet('data'); if (!d.error) DB = d;
     } else {
       DB.budgets = DB.budgets || [];
       const row = DB.budgets.find(b => nkey(b['Category']||'') === nkey(category) && nkey(b['Scope']||'ALL') === nkey(scope));
-      if (row) row['Monthly Budget'] = v; else DB.budgets.push({ 'Category':category, 'Scope':scope, 'Monthly Budget':v });
+      if (row) row[col] = v; else DB.budgets.push({ 'Category':category, 'Scope':scope, [col]:v });
     }
-    toast('Budget saved: ' + category + ' (' + (scope==='ALL'?'company':scope) + ') → ' + fmt(v));
+    toast((isTotal ? 'Project budget saved: ' : 'Budget saved: ') + category + ' (' + (scope==='ALL'?'company':scope) + ') → ' + fmt(v));
     renderAll();
   } catch (e) { toast('Failed: ' + e.message); }
 }
