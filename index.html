@@ -434,6 +434,7 @@ td.r,th.r{text-align:right}
         <h3 style="justify-content:space-between"><span style="display:flex;align-items:center;gap:9px"><span></span>Budget vs actual — sources · salary · incentives</span>
           <select id="budScope" style="font-size:12px;padding:6px 11px"><option value="ALL">Company-wide</option></select></h3>
         <div style="overflow-x:auto"><table id="tblBudget"></table></div>
+        <div style="overflow-x:auto;margin-top:18px" id="budProjWrap"><table id="tblBudgetProjects"></table></div>
         <p class="hint" id="budHint" style="margin-top:10px">"Suggested" is what the system estimates each head actually needs at your current run-rate: per-booking cost rules × booking velocity for variable heads, roster payroll for salaries, accrued incentives for the team. Type a budget and press Save — utilization and overrun projections update against it.</p>
       </div>
       <div class="grid two section">
@@ -1488,6 +1489,33 @@ function projectLifeRows(L, scope) {
   return { rows, start, monthsLive };
 }
 
+/* ── company-wide roll-up of project-life budgets ──
+   Budget per head = sum of every project's Total Budget (Project Life).
+   Spent per head  = sum of every project's spend to date on that head.
+   Central (CENTRAL-scope) spend belongs to no project, so it is shown as its
+   own line — not counted against any project budget. */
+function companyLifeRollup(L) {
+  const projects = PJ().map(p => p.name);
+  const per = projects.map(name => ({ name, ...projectLifeRows(L, name) }));
+  const heads = per.length ? per[0].rows.map(r => r.name) : [];
+  const rows = heads.map((h, i) => {
+    const budget = per.reduce((a, p) => a + p.rows[i].budget, 0);
+    const actual = per.reduce((a, p) => a + p.rows[i].actual, 0);
+    return { name: h, budget, actual, remaining: budget - actual,
+      perMonth: per.reduce((a, p) => a + p.rows[i].perMonth, 0),
+      util: budget > 0 ? actual / budget : null };
+  });
+  const projRows = per.map(p => {
+    const budget = p.rows.reduce((a, r) => a + r.budget, 0);
+    const actual = p.rows.reduce((a, r) => a + r.actual, 0);
+    return { name: p.name, budget, actual, remaining: budget - actual,
+      util: budget > 0 ? actual / budget : null, start: p.start,
+      over: p.rows.filter(r => r.util != null && r.util > 1).length };
+  });
+  const central = L.exps.filter(e => nrm(e.scope) === 'central').reduce((a, e) => a + e.amount, 0);
+  return { rows, projRows, central };
+}
+
 function forecast(ys, n) {
   const k = ys.length;
   if (k < 2) return { next: Array(n).fill(ys[0]||0), band: 0, slope: 0 };
@@ -1642,10 +1670,10 @@ function buildInsights(A) {
   }
 
   // budget & payables lens
-  const overs = A.budgetRows.filter(r => r.util != null && r.util > 1.05);
+  const overs = companyLifeRollup(A.lifeCtx).rows.filter(r => r.util != null && r.util > 1.05);
   if (overs.length)
     out.push({ level:'warn', title:`${overs.length} budget head${overs.length>1?'s':''} running over`,
-      body:`${overs.slice(0,3).map(r=>r.name+' at '+pct(r.util)).join(', ')}${overs.length>3?' and more':''}. Either the budget was set too tight, or spend discipline slipped — the Budget page shows the suggested level for each head at current velocity.` });
+      body:`${overs.slice(0,3).map(r=>r.name+' at '+pct(r.util)).join(', ')}${overs.length>3?' and more':''}. Measured against the project-life budgets added up across all projects. Either a budget was set too tight, or spend discipline slipped — open the Budget page and check which project is driving it.` });
   const outst = A.payables.reduce((a,p)=>a+Math.max(0,p.outstanding),0);
   if (outst > 0 && A.pnl.feeAll > 0 && outst > A.pnl.feeAll * 0.05)
     out.push({ level:'warn', title:'Payables are building up quietly',
@@ -1906,36 +1934,9 @@ function printInvoice(bookingId) {
 function renderBudget(A) {
   window.__A = A;
   const scope = ($('budScope') && $('budScope').value) || 'ALL';
-  if (!window.__budHintCompany) window.__budHintCompany = $('budHint').innerHTML;
+  $('budProjWrap').style.display = scope === 'ALL' ? '' : 'none';
   if (scope !== 'ALL') { renderProjectLifeBudget(A, scope); renderRulesAndPayables(A); return; }
-  $('budHint').innerHTML = window.__budHintCompany;
-  const rows = A.budgetRows;
-  const over = rows.filter(r => r.util != null && r.util > 1).length;
-  const withB = rows.filter(r => r.budget > 0);
-  const budTotal = rows.reduce((a,r)=>a+r.budget,0), budActual = rows.reduce((a,r)=>a+r.actual,0);
-  const scopeLbl = scope === 'ALL' ? 'company-wide' : scope;
-  const cards = [
-    ['Monthly budget (total)', budTotal, fmt, withB.length + ' heads budgeted · ' + scopeLbl, null, '#F0BC52'],
-    ['Actual / accrued per month', budActual, fmt, 'avg over ' + A.mip + ' month' + (A.mip>1?'s':'') + ' · ' + scopeLbl, null, '#5BE3FF'],
-    ['Utilization', budTotal>0?budActual/budTotal:null, v=>v==null||!isFinite(v)?'–':pct(v), budTotal>0?(budActual<=budTotal?'within budget':'over budget'):'set budgets below', null, budActual<=budTotal?'#3CE4A4':'#FF6F62', budActual<=budTotal?'up':'down'],
-    ['Heads over budget', over, v=>v==null?'–':Math.round(v)+'', 'of ' + withB.length + ' budgeted heads', null, over?'#FF6F62':'#3CE4A4'],
-    ['Projected FY spend', budActual*12, fmt, 'at current run-rate · ' + scopeLbl, null, '#A18BFF'],
-    ['Outstanding payables', A.payables.reduce((a,p)=>a+Math.max(0,p.outstanding),0), fmt, 'company-wide, accrued not yet paid', null, '#F2B650']
-  ];
-  $('budCards').innerHTML = cards.map(([l,,,d,,,cls]) =>
-    `<div class="card kpi"><div class="lbl">${l}</div><div class="val num">–</div><div class="delta ${cls||'flat'}">${d}</div></div>`).join('');
-  document.querySelectorAll('#budCards .val').forEach((el,i) => countUp(el, cards[i][1], cards[i][2]));
-
-  $('tblBudget').innerHTML = `<tr><th>Head</th><th class="r">Monthly budget</th><th class="r">Actual / accrued (mo)</th><th class="r">Utilization</th><th class="r">Suggested</th><th class="r" style="min-width:200px">Set budget</th></tr>` +
-    rows.map((r,i) => {
-      const util = r.util==null ? '<span class="pill warn">no budget</span>'
-        : `<span class="pill ${r.util<=0.9?'good':r.util<=1.05?'warn':'risk'}">${pct(r.util)}</span>`;
-      return `<tr><td>${esc(r.name)}</td><td class="r num">${r.budget>0?fmt(r.budget):'–'}</td>
-        <td class="r num">${fmt(r.actual)}</td><td class="r">${util}</td>
-        <td class="r num" style="color:var(--cyan)">${fmt(r.suggested)}</td>
-        <td class="r"><input type="number" id="bud_${i}" value="${Math.round(r.budget)||''}" placeholder="${Math.round(r.suggested)}" style="width:110px;padding:6px 9px;font-size:12px">
-        <button class="btn ghost" style="padding:5px 11px;font-size:11.5px;margin-left:5px" onclick="saveBudget('${esc(r.name)}','bud_${i}','${esc(scope)}')">Save</button></td></tr>`;
-    }).join('');
+  renderCompanyLifeBudget(A);
   renderRulesAndPayables(A);
 }
 
@@ -1954,6 +1955,48 @@ function renderRulesAndPayables(A) {
        <td class="r num">${fmt(A.payables.reduce((a,p)=>a+p.paid,0))}</td>
        <td class="r num">${fmt(A.payables.reduce((a,p)=>a+p.outstanding,0))}</td></tr>`;
 }
+function renderCompanyLifeBudget(A) {
+  const R = companyLifeRollup(A.lifeCtx);
+  const budTotal = R.rows.reduce((a,r)=>a+r.budget,0), spent = R.rows.reduce((a,r)=>a+r.actual,0);
+  const withB = R.projRows.filter(p => p.budget > 0);
+  const over = R.rows.filter(r => r.util != null && r.util > 1).length;
+  const cards = [
+    ['Total budget (all projects)', budTotal, fmt, withB.length + ' of ' + R.projRows.length + ' projects budgeted', null, '#F0BC52'],
+    ['Spent to date (projects)', spent, fmt, 'since each project started · salary auto-added', null, '#5BE3FF'],
+    ['Remaining', budTotal - spent, fmt, budTotal>0 ? (spent<=budTotal ? 'left across all project budgets' : 'over across all projects') : 'set budgets in each project', null, spent<=budTotal?'#3CE4A4':'#FF6F62', spent<=budTotal?'up':'down'],
+    ['Utilization', budTotal>0 ? spent/budTotal : null, v=>v==null||!isFinite(v)?'–':pct(v), 'of total project budgets', null, spent<=budTotal?'#3CE4A4':'#FF6F62'],
+    ['Central costs to date', R.central, fmt, 'shared, not in any project budget', null, '#A18BFF'],
+    ['Heads over budget', over, v=>v==null?'–':Math.round(v)+'', 'company-wide, all projects added up', null, over?'#FF6F62':'#3CE4A4']
+  ];
+  $('budCards').innerHTML = cards.map(([l,,,d,,,cls]) =>
+    `<div class="card kpi"><div class="lbl">${l}</div><div class="val num">–</div><div class="delta ${cls||'flat'}">${d}</div></div>`).join('');
+  document.querySelectorAll('#budCards .val').forEach((el,i) => countUp(el, cards[i][1], cards[i][2]));
+
+  const utilPill = u => u==null ? '<span class="pill warn">no budget</span>'
+    : `<span class="pill ${u<=0.9?'good':u<=1.05?'warn':'risk'}">${pct(u)}</span>`;
+  const remCell = (b, rem) => `<td class="r num" style="color:${b<=0?'var(--muted)':rem>=0?'var(--jade)':'var(--ember)'}">${b>0?fmt(rem):'–'}</td>`;
+
+  $('tblBudget').innerHTML = `<tr><th>Head</th><th class="r">Total budget (all projects)</th><th class="r">Spent to date</th><th class="r">Remaining</th><th class="r">Utilization</th><th class="r">Avg / month</th></tr>` +
+    R.rows.map(r => `<tr><td>${esc(r.name)}</td><td class="r num">${r.budget>0?fmt(r.budget):'–'}</td>
+      <td class="r num">${fmt(r.actual)}</td>${remCell(r.budget, r.remaining)}
+      <td class="r">${utilPill(r.util)}</td><td class="r num" style="color:var(--cyan)">${fmt(r.perMonth)}</td></tr>`).join('')
+    + `<tr><td><b>Total — projects</b></td><td class="r num"><b>${fmt(budTotal)}</b></td><td class="r num"><b>${fmt(spent)}</b></td>${remCell(budTotal, budTotal-spent)}<td class="r">${utilPill(budTotal>0?spent/budTotal:null)}</td><td></td></tr>`
+    + `<tr><td style="color:var(--muted)">Central costs (shared, no project)</td><td class="r num" style="color:var(--muted)">–</td><td class="r num">${fmt(R.central)}</td><td></td><td></td><td></td></tr>`;
+
+  $('tblBudgetProjects').innerHTML = `<tr><th>Project</th><th class="r">Total budget</th><th class="r">Spent to date</th><th class="r">Remaining</th><th class="r">Utilization</th><th class="r">Heads over</th><th class="r"></th></tr>` +
+    R.projRows.map(p => `<tr><td>${esc(p.name)}${p.start?` <span style="color:var(--muted);font-size:11px">· since ${p.start.toLocaleDateString('en-IN',{month:'short',year:'numeric'})}</span>`:''}</td>
+      <td class="r num">${p.budget>0?fmt(p.budget):'–'}</td><td class="r num">${fmt(p.actual)}</td>${remCell(p.budget, p.remaining)}
+      <td class="r">${utilPill(p.util)}</td><td class="r num" style="color:${p.over?'var(--ember)':'var(--muted)'}">${p.over||'–'}</td>
+      <td class="r"><button class="btn ghost" style="padding:5px 11px;font-size:11.5px" onclick="openBudgetProject('${esc(p.name)}')">Open ›</button></td></tr>`).join('');
+
+  $('budHint').innerHTML = `<b>Company-wide = all project budgets added up.</b> Each head's budget is the sum of every project's Total Budget (Project Life); spent is everything spent on that head across all projects since each started (FY/month filters don't apply). Budgets are set inside each project — pick one from the dropdown or tap <b>Open ›</b>. Central costs don't belong to any project, so they're shown separately and not counted against any budget. Salary is added automatically from the Team sheet.`;
+}
+function openBudgetProject(name) {
+  const sel = $('budScope'); sel.value = name;
+  if (window.__A) renderBudget(window.__A);
+  if (sel.scrollIntoView) sel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
 function renderProjectLifeBudget(A, scope) {
   const L = projectLifeRows(A.lifeCtx, scope);
   const rows = L.rows;
