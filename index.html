@@ -201,7 +201,7 @@ td.r,th.r{text-align:right}
 .empty{color:var(--faint);text-align:center;padding:32px;font-size:13px}
 #toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(24px);opacity:0;pointer-events:none;
   background:rgba(10,15,30,.94);backdrop-filter:blur(16px);border:1px solid rgba(240,188,82,.4);color:var(--text);
-  padding:12px 22px;border-radius:13px;transition:.3s cubic-bezier(.2,.7,.2,1);z-index:60;font-size:13px;max-width:88vw;
+  padding:12px 22px;border-radius:13px;transition:.3s cubic-bezier(.2,.7,.2,1);z-index:90;font-size:13px;max-width:88vw;
   box-shadow:0 18px 50px rgba(0,0,0,.5), var(--glow-brass)}
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 #loader{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:50;flex-direction:column;gap:18px;color:var(--muted);text-align:center;padding:20px}
@@ -213,6 +213,24 @@ td.r,th.r{text-align:right}
   animation:sp 1s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
 .view{display:none}.view.on{display:block}
+/* ═══ login, user box, roles ═══ */
+#loginScreen,.modalbg{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:20px}
+#loginScreen{z-index:70;background:var(--bg)}
+.modalbg{z-index:80;background:rgba(4,6,12,.78);backdrop-filter:blur(6px)}
+#loginScreen.show,.modalbg.show{display:flex}
+.logincard{width:100%;max-width:400px;padding:30px 30px 26px}
+.logincard .lg{font-size:10.5px;letter-spacing:.28em;text-transform:uppercase;color:var(--brass);font-family:'JetBrains Mono',monospace;margin-bottom:10px}
+.logincard h2{font-size:24px;font-weight:700;letter-spacing:-.02em;margin-bottom:20px}
+.logincard .field{margin-bottom:14px}
+.logincard .msg{min-height:34px;font-size:12.5px;line-height:1.5;color:var(--amber);margin-bottom:12px}
+.logincard .row{display:flex;gap:10px}
+.logincard .btn{flex:1}
+.userbox{display:none;align-items:center;gap:8px;font-size:12px;color:var(--muted);white-space:nowrap}
+.userbox.on{display:inline-flex}
+.userbox b{color:var(--text);font-weight:600}
+body:not(.role-admin) .adm{display:none!important}
+body.role-viewer .wr{display:none!important}
+
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}body::before,body::after{animation:none!important}}
 @media(max-width:940px){
   .rail{padding:11px 14px;gap:5px}
@@ -220,6 +238,7 @@ td.r,th.r{text-align:right}
   .navbtn{padding:7px 11px;font-size:12px}
   .navbtn .ic{display:none}
   .rail .foot{width:100%;margin-left:0;text-align:center}
+  .userbox{width:100%;justify-content:center}
   main{padding:14px 14px 70px}
   .filters .title{width:100%;font-size:21px}
   select{flex:1;min-width:0}
@@ -233,6 +252,31 @@ td.r,th.r{text-align:right}
 
 <div id="loader"><div class="spin"></div><div class="lg">Mangalam Realtech · v3</div><div id="loadmsg">Syncing with Google Sheets…</div></div>
 <div class="gridbg"></div>
+
+<!-- ═══ LOGIN ═══ -->
+<div id="loginScreen">
+  <div class="card logincard">
+    <div class="lg">Mangalam Realtech · Business Pulse</div>
+    <h2>Sign in</h2>
+    <div class="field"><label>Username</label><input id="lgUser" autocomplete="username" autocapitalize="none" spellcheck="false"></div>
+    <div class="field"><label>Password</label><input type="password" id="lgPass" autocomplete="current-password"></div>
+    <div class="msg" id="lgMsg"></div>
+    <div class="row"><button class="btn" id="lgBtn">Sign in</button></div>
+  </div>
+</div>
+
+<!-- ═══ CHANGE PASSWORD ═══ -->
+<div class="modalbg" id="pwModal">
+  <div class="card logincard">
+    <h2>Change password</h2>
+    <div class="field"><label>Current password</label><input type="password" id="pwOld" autocomplete="current-password"></div>
+    <div class="field"><label>New password (at least 8 characters)</label><input type="password" id="pwNew" autocomplete="new-password"></div>
+    <div class="field"><label>New password again</label><input type="password" id="pwNew2" autocomplete="new-password"></div>
+    <div class="msg" id="pwMsg"></div>
+    <div class="row"><button class="btn" id="pwSave">Save</button><button class="btn ghost" id="pwCancel">Cancel</button></div>
+  </div>
+</div>
+
 
 <div class="shell">
   <nav class="rail">
@@ -248,10 +292,15 @@ td.r,th.r{text-align:right}
     <button class="navbtn" data-view="forecast" data-label="Forecast"><span class="ic">↗</span>Forecast</button>
     <button class="navbtn" data-view="simulator" data-label="Simulator"><span class="ic">≋</span>Simulator</button>
     <button class="navbtn" data-view="insights" data-label="Insights"><span class="ic">✦</span>Insights</button>
-    <button class="navbtn" data-view="sale" data-label="New booking"><span class="ic">＋</span>Booking</button>
-    <button class="navbtn" data-view="expense" data-label="New expense"><span class="ic">₹</span>Expense</button>
-    <button class="navbtn" data-view="projects" data-label="Projects"><span class="ic">▤</span>Projects</button>
+    <button class="navbtn wr" data-view="sale" data-label="New booking"><span class="ic">＋</span>Booking</button>
+    <button class="navbtn wr" data-view="expense" data-label="Expenses"><span class="ic">₹</span>Expense</button>
+    <button class="navbtn adm" data-view="projects" data-label="Projects"><span class="ic">▤</span>Projects</button>
     <div class="foot"><span class="dot" id="connDot"></span><span id="connTxt">Connecting…</span></div>
+    <div class="userbox" id="userBox">
+      <span>👤 <b id="userName"></b></span><span class="pill good" id="userRole"></span>
+      <button class="btn ghost" id="pwBtn" style="padding:5px 12px;font-size:11.5px">Password</button>
+      <button class="btn ghost" id="logoutBtn" style="padding:5px 12px;font-size:11.5px">Log out</button>
+    </div>
   </nav>
 
   <main>
@@ -358,7 +407,7 @@ td.r,th.r{text-align:right}
         <h3>Fee generated vs cost per person</h3>
         <div class="chartbox" style="height:300px"><canvas id="chTeam"></canvas></div>
       </div>
-      <div class="card section">
+      <div class="card section wr">
         <h3>Log a recovery — feeds the CRM incentive (% of recovery, ≥80% of target)</h3>
         <div class="formgrid">
           <div class="field"><label>Date</label><input type="date" id="rcDate"></div>
@@ -373,7 +422,7 @@ td.r,th.r{text-align:right}
         </div>
         <div style="overflow-x:auto;margin-top:16px"><table id="tblRecovery"></table></div>
       </div>
-      <div class="card section">
+      <div class="card section wr">
         <h3>Log a walk-in — feeds the Per Walk-in incentive (Tele Sales / CP Sourcing)</h3>
         <div class="formgrid">
           <div class="field"><label>Date</label><input type="date" id="wiDate"></div>
@@ -388,7 +437,7 @@ td.r,th.r{text-align:right}
         </div>
         <div style="overflow-x:auto;margin-top:16px"><table id="tblWalkin"></table></div>
       </div>
-      <div class="card section">
+      <div class="card section adm">
         <h3>Add team member</h3>
         <div class="formgrid">
           <div class="field"><label>Name</label><input id="tName" placeholder="Exactly as entered on bookings"></div>
@@ -593,12 +642,40 @@ td.r,th.r{text-align:right}
           <div class="field"><label>Scope</label><select id="eScope"></select></div>
           <div class="field"><label>Category</label><select id="eCategory"></select></div>
           <div class="field"><label>Amount (₹)</label><input type="number" id="eAmount" placeholder="250000"></div>
+          <div class="field"><label>Vendor / payee</label><input id="eVendor" placeholder="e.g. Sai Outdoor Media"></div>
+          <div class="field"><label>Bill / invoice no.</label><input id="eBillNo" placeholder="As printed on the bill"></div>
           <div class="field" style="grid-column:1/-1"><label>Description</label><input id="eDesc" placeholder="e.g. Hinjewadi flyover hoarding, Aug rent"></div>
         </div>
         <div class="formfoot">
           <button class="btn" id="saveExpense">Save expense</button>
-          <span class="hint">Scope "CENTRAL" = shared marketing / CP-sourcing cost, allocated across sites automatically.</span>
+          <span class="hint">Scope "CENTRAL" = shared marketing / CP-sourcing cost, allocated across sites automatically. <b>Vendor and bill no. power the duplicate check</b> — fill them whenever you have a bill. Every save is checked against earlier entries; a possible duplicate asks you to confirm first.</span>
         </div>
+      </div>
+
+      <div class="grid kpis section" id="expSummary"></div>
+
+      <div class="card section">
+        <h3>Duplicate watch — entries that look like the same bill twice</h3>
+        <div style="max-height:340px;overflow-y:auto;overflow-x:auto;border:1px solid var(--line);border-radius:12px">
+          <table id="tblExpDup"></table>
+        </div>
+        <p class="hint" style="margin-top:10px"><b>High</b> = same bill number, or same date + project + category + amount. <b>Medium</b> = same category + amount within 7 days, or same vendor + amount within 20 days. Not every match is a mistake (two identical print jobs can be real) — check the bill, then an admin can delete the extra one. Looks across every entry ever logged, not just the period selected at the top.</p>
+      </div>
+
+      <div class="card section">
+        <h3>Logged expenses — review &amp; delete</h3>
+        <div class="filters" style="margin-bottom:16px">
+          <div class="field"><label>Search</label><input id="expSearch" placeholder="vendor, bill no., category, project, ID…"></div>
+          <div class="field"><label>Show</label><select id="expFilter">
+            <option value="all">All entries</option>
+            <option value="flagged">Risk-flagged only</option>
+            <option value="dupes">Possible duplicates only</option>
+          </select></div>
+        </div>
+        <div style="max-height:460px;overflow-y:auto;overflow-x:auto;border:1px solid var(--line);border-radius:12px">
+          <table id="tblExpenses"></table>
+        </div>
+        <p class="hint" style="margin-top:10px"><b>Deleting</b> (admins only) asks for a reason. A full copy of the entry — with who deleted it — is kept in the <b>Expense_Audit</b> sheet, so nothing disappears without a trace, and expense IDs are never re-used. <b>⚑ Flags</b> don't block a save — they mark entries worth a second look: large amount with no bill no., future or heavily back-dated, far above the usual for that category, or several same-day bills that together cross ₹25,000. Salary shown on the Pulse page is calculated automatically and does not appear here.</p>
       </div>
     </section>
 
@@ -632,7 +709,7 @@ td.r,th.r{text-align:right}
 <script>
 /* ════════════════════════════════════════════════════════════
    CONFIG — paste your Apps Script Web App /exec URL here.
-   Leave empty to explore with generated demo data.
+   Leave empty to explore with generated demo data (no login).
    ════════════════════════════════════════════════════════════ */
 const CONFIG = {
   API_URL: 'https://script.google.com/macros/s/AKfycbxLY149NJD5Hh-G5AVNC9-kBMufrPExam_hsWyAeeLzIxzmORBTEs3WIe6rkrI7zqL6/exec'
@@ -659,15 +736,95 @@ const parseDate = s => new Date(s + 'T00:00:00');
 const fyOf = d => d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1;
 const fyLabel = fy => fy === 'all' ? 'All time' : 'FY ' + fy + '–' + String(fy+1).slice(2);
 const monthKey = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+/* yyyy-mm-dd in the viewer's OWN time zone. (toISOString() converts to UTC first, which
+   shows the previous day for India — never use it to display or fill a date.) */
+const ymdLocal = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 const fyMonths = fy => MONTHS.map((lbl,i) => {
   const m = (i+3) % 12, y = i < 9 ? fy : fy+1;
   return { key: y + '-' + String(m+1).padStart(2,'0'), label: lbl, y, m };
 });
 const toast = m => { const t=$('toast'); t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2800); };
 
+/* ════════════════ LOGIN & SESSION ════════════════
+   The Apps Script backend now requires a login for every request. After signing in
+   the browser keeps a signed token (valid ~3 days) and sends it with each call.
+   If the backend says the token is missing/expired, the login screen comes back. */
+const SESSION_KEY = 'bp_session_v1';
+let SESSION = { token: null, user: null, expiresAt: 0 };
+let ME = { username: '', name: '', role: 'viewer' };
+try {
+  const raw = localStorage.getItem(SESSION_KEY);
+  if (raw) { const s = JSON.parse(raw); if (s && s.token && (!s.expiresAt || s.expiresAt > Date.now())) SESSION = s; }
+} catch (e) {}
+function saveSession(s) { SESSION = s; try { localStorage.setItem(SESSION_KEY, JSON.stringify(s)); } catch (e) {} }
+function clearSession() { SESSION = { token: null, user: null, expiresAt: 0 }; try { localStorage.removeItem(SESSION_KEY); } catch (e) {} }
+
+function authError_(msg) { const e = new Error(msg); e.auth = true; return e; }
+function showLogin(msg) {
+  $('loader').style.display = 'none';
+  $('userBox').classList.remove('on');
+  $('lgMsg').textContent = msg || '';
+  $('loginScreen').classList.add('show');
+  setTimeout(() => { try { ($('lgUser').value ? $('lgPass') : $('lgUser')).focus(); } catch (e) {} }, 50);
+}
+function hideLogin() { $('loginScreen').classList.remove('show'); $('lgPass').value = ''; }
+/* Looks at every backend reply: if it says "not signed in", show the login screen. */
+function handleAuth_(res) {
+  if (res && res.error === 'AUTH_REQUIRED') {
+    clearSession(); showLogin('Your session has ended — please sign in again.');
+    throw authError_('Please sign in again');
+  }
+  if (res && res.error === 'AUTH_NOT_SETUP') {
+    clearSession(); showLogin('Login is not set up yet. In Apps Script run setupUsers() once, then redeploy.');
+    throw authError_('Login is not set up yet');
+  }
+  return res;
+}
+/* Shows who is signed in, and hides the buttons their role can't use (the backend enforces it too). */
+function applyMe(me) {
+  ME = me || { username: '', name: 'Guest', role: 'viewer' };
+  document.body.classList.remove('role-admin', 'role-editor', 'role-viewer');
+  document.body.classList.add('role-' + ME.role);
+  $('userName').textContent = ME.name || ME.username;
+  $('userRole').textContent = ME.role;
+  $('userRole').className = 'pill ' + (ME.role === 'admin' ? 'good' : ME.role === 'editor' ? 'warn' : '');
+  $('userBox').classList.toggle('on', !!CONFIG.API_URL);
+  // if the current page just became hidden for this role, go back to Pulse
+  const cur = document.querySelector('.navbtn.active');
+  if (cur && getComputedStyle(cur).display === 'none') document.querySelector('.navbtn[data-view="pulse"]').click();
+}
+const isAdmin = () => ME.role === 'admin';
+
+async function doLogin() {
+  const username = $('lgUser').value.trim(), password = $('lgPass').value;
+  if (!username || !password) { $('lgMsg').textContent = 'Enter your username and password.'; return; }
+  $('lgBtn').disabled = true; $('lgMsg').textContent = 'Signing in…';
+  try {
+    let res;
+    try {
+      const r = await fetch(CONFIG.API_URL, { method: 'POST', redirect: 'follow',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'login', username, password }) });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      res = await r.json();
+    } catch (e) {
+      console.warn('login POST failed → JSONP fallback:', e.message);
+      res = await jsonp({ action: 'login', username, password });
+    }
+    if (res.error === 'AUTH_NOT_SETUP') { $('lgMsg').textContent = 'Login is not set up yet. In Apps Script run setupUsers() once, then redeploy.'; }
+    else if (res.error) { $('lgMsg').textContent = res.error; }
+    else {
+      saveSession({ token: res.token, user: res.user, expiresAt: res.expiresAt });
+      hideLogin(); $('lgMsg').textContent = '';
+      loadData();
+    }
+  } catch (e) { $('lgMsg').textContent = 'Could not reach the server: ' + e.message; }
+  $('lgBtn').disabled = false;
+}
+
 /* ── data access ──
    Primary: fetch. Fallback: JSONP (script tag) — immune to CORS, works with
-   any Apps Script deployment set to "Anyone". Writes fall back to GET params. */
+   any Apps Script deployment set to "Anyone". Writes fall back to GET params.
+   Every call carries the login token; a "not signed in" reply brings back the login screen. */
 function jsonp(params) {
   return new Promise((resolve, reject) => {
     const cb = '__bp_cb' + Date.now() + Math.floor(Math.random()*1e4);
@@ -675,35 +832,40 @@ function jsonp(params) {
     const clean = () => { try { delete window[cb]; } catch(e){ window[cb]=undefined; } s.remove(); };
     window[cb] = d => { clean(); resolve(d); };
     s.onerror = () => { clean(); reject(new Error('Could not reach Apps Script (check deployment access = Anyone)')); };
-    const q = new URLSearchParams({ ...params, callback: cb }).toString();
+    const full = (SESSION.token && !params.token) ? { ...params, token: SESSION.token } : params;
+    const q = new URLSearchParams({ ...full, callback: cb }).toString();
     s.src = CONFIG.API_URL + (CONFIG.API_URL.includes('?') ? '&' : '?') + q;
     document.body.appendChild(s);
     setTimeout(() => { if (window[cb]) { clean(); reject(new Error('Apps Script timed out')); } }, 25000);
   });
 }
 async function apiGet(action) {
+  let res;
   try {
-    const r = await fetch(CONFIG.API_URL + '?action=' + action, { redirect: 'follow' });
+    const r = await fetch(CONFIG.API_URL + '?action=' + action + '&token=' + encodeURIComponent(SESSION.token || ''), { redirect: 'follow' });
     if (!r.ok) throw new Error('HTTP ' + r.status);
-    return await r.json();
+    res = await r.json();
   } catch (e) {
     console.warn('fetch GET failed → JSONP fallback:', e.message);
-    return jsonp({ action });
+    res = await jsonp({ action });
   }
+  return handleAuth_(res);
 }
 async function apiPost(payload) {
+  let res;
   try {
     const r = await fetch(CONFIG.API_URL, {
       method: 'POST', redirect: 'follow',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({ ...payload, token: SESSION.token })
     });
     if (!r.ok) throw new Error('HTTP ' + r.status);
-    return await r.json();
+    res = await r.json();
   } catch (e) {
     console.warn('fetch POST failed → JSONP fallback:', e.message);
-    return jsonp(payload);   // backend accepts writes via GET params too
+    res = await jsonp(payload);   // backend accepts writes via GET params too
   }
+  return handleAuth_(res);
 }
 
 async function loadData() {
@@ -715,6 +877,7 @@ async function loadData() {
   try {
     if (!CONFIG.API_URL) {
       DB = demoData();
+      applyMe({ username: 'demo', name: 'Demo', role: 'admin' });
       setConn('demo', 'Demo data — set API_URL');
     } else {
       $('loadmsg').textContent = 'Syncing with Google Sheets…';
@@ -722,6 +885,7 @@ async function loadData() {
       if (d.error) throw new Error(d.error);
       if (!Array.isArray(d.sales)) throw new Error('Unexpected response — is the latest Code.gs deployed?');
       DB = d;
+      applyMe(d.me);
       const nb = DB.sales.length, ne = (DB.expenses||[]).length;
       if (nb === 0 && d.sheetsFound && !d.sheetsFound.sales) {
         setConn('demo', 'Live · Sales sheet not found');
@@ -736,8 +900,10 @@ async function loadData() {
     initFilters();
     renderAll();
   } catch (err) {
+    if (err && err.auth) { $('loader').style.display = 'none'; return; }   // login screen is already showing
     console.error('loadData failed:', err);
     DB = demoData();
+    applyMe({ username: 'offline', name: 'Offline demo', role: 'viewer' });
     initFilters();
     renderAll();
     setConn('err', 'Offline — demo shown');
@@ -1108,7 +1274,9 @@ function initFilters() {
   budSel.innerHTML = '<option value="ALL">Company-wide</option>' + projNames.map(p=>`<option ${p===keep?'selected':''}>${esc(p)}</option>`).join('');
   if (keep === 'ALL') budSel.value = 'ALL';
   $('eCategory').innerHTML = (DB.expenseCategories||[]).map(c=>`<option>${esc(c.category)}</option>`).join('');
-  $('sDate').valueAsDate = new Date(); $('eDate').valueAsDate = new Date(); $('rcDate').valueAsDate = new Date(); $('wiDate').valueAsDate = new Date();
+  // today's date in the viewer's own time zone (valueAsDate uses UTC → shows yesterday early morning in India)
+  const todayStr = ymdLocal(new Date());
+  $('sDate').value = todayStr; $('eDate').value = todayStr; $('rcDate').value = todayStr; $('wiDate').value = todayStr;
 }
 
 function inRange(d) {
@@ -1696,6 +1864,7 @@ function renderAll() {
   renderTokens(A); renderBudget(A);
   renderTargets(A); renderSimulator(A);
   renderForecast(A); renderInsights(A); renderProjects();
+  try { renderExpenseList(); } catch (e) { console.error('expense list:', e); }
   renderBookingsList();
 }
 
@@ -1707,12 +1876,12 @@ function renderTokens(A) {
     $('tblTokens').innerHTML = '<tr><td class="empty">No open tokens right now. Log one via New booking with status “Token”.</td></tr>';
     return;
   }
-  $('tblTokens').innerHTML = `<tr><th>Token</th><th>Date</th><th>Project</th><th>Customer</th><th>Source</th><th>Sales person</th><th class="r">Value</th><th class="r">Fee if booked</th><th class="r" style="min-width:170px">Allotment action</th></tr>` +
-    T.map(t => `<tr><td class="num">${esc(t.id)}</td><td class="num">${t.date.toISOString().slice(0,10)}</td>
+  $('tblTokens').innerHTML = `<tr><th>Token</th><th>Date</th><th>Project</th><th>Customer</th><th>Source</th><th>Sales person</th><th class="r">Value</th><th class="r">Fee if booked</th><th class="r wr" style="min-width:170px">Allotment action</th></tr>` +
+    T.map(t => `<tr><td class="num">${esc(t.id)}</td><td class="num">${ymdLocal(t.date)}</td>
       <td>${esc(t.project)}</td><td>${esc(t.sub && !t.person ? t.sub : '')}${esc((DB.sales.find(r=>String(r['Booking ID']||'').trim()===String(t.id).trim())||{})['Customer']||'')}</td>
       <td>${esc(t.source)}</td><td>${esc(t.person)}</td>
       <td class="r num">${fmt(t.value)}</td><td class="r num">${fmt(t.fee)}</td>
-      <td class="r"><button class="btn" style="padding:5px 12px;font-size:11.5px" onclick="tokenAction('${esc(t.id)}','Booked')">Book</button>
+      <td class="r wr"><button class="btn" style="padding:5px 12px;font-size:11.5px" onclick="tokenAction('${esc(t.id)}','Booked')">Book</button>
       <button class="btn ghost" style="padding:5px 12px;font-size:11.5px;margin-left:6px;color:var(--ember);border-color:rgba(255,111,98,.4)" onclick="tokenAction('${esc(t.id)}','Cancelled')">Cancel</button></td></tr>`).join('');
 }
 async function tokenAction(bookingId, status) {
@@ -1774,7 +1943,7 @@ function renderBookingsList() {
   const payLabel = p => p === 'Paid' ? 'Received' : 'Due';
   const STATUS_OPTS = ['Booked','Agreement Done','Cancelled'];
   const thStyle = 'position:sticky;top:0;background:#0c1220;z-index:1';
-  tbl.innerHTML = `<tr><th style="${thStyle}">#</th><th style="${thStyle}">Booking</th><th style="${thStyle}">Date</th><th style="${thStyle}">Project</th><th style="${thStyle}">Unit</th><th style="${thStyle}">Customer</th><th style="${thStyle}">Sales person</th><th class="r" style="${thStyle}">Agreement value</th><th class="r" style="${thStyle}">Received</th><th style="${thStyle}">Commission due</th><th style="${thStyle}">Status</th><th style="${thStyle}">Commission bill</th><th class="r" style="min-width:210px;${thStyle}">Actions</th></tr>` +
+  tbl.innerHTML = `<tr><th style="${thStyle}">#</th><th style="${thStyle}">Booking</th><th style="${thStyle}">Date</th><th style="${thStyle}">Project</th><th style="${thStyle}">Unit</th><th style="${thStyle}">Customer</th><th style="${thStyle}">Sales person</th><th class="r" style="${thStyle}">Agreement value</th><th class="r" style="${thStyle}">Received</th><th style="${thStyle}">Commission due</th><th style="${thStyle}">Status</th><th style="${thStyle}">Commission bill</th><th class="r wr" style="min-width:210px;${thStyle}">Actions</th></tr>` +
     rows.map((s, i) => {
       const canRaise = (s.status === 'Agreement Done' || s.status === 'Registered') && s.billStatus !== 'Invoiced' && s.billStatus !== 'Received';
       const canReceive = s.billStatus === 'Invoiced';
@@ -1785,16 +1954,16 @@ function renderBookingsList() {
       const opts = STATUS_OPTS.indexOf(s.status) === -1 ? [s.status, ...STATUS_OPTS] : STATUS_OPTS;
       return `<tr>
         <td class="num">${i + 1}</td>
-        <td class="num">${esc(s.id)}</td><td class="num">${s.date.toISOString().slice(0,10)}</td>
+        <td class="num">${esc(s.id)}</td><td class="num">${ymdLocal(s.date)}</td>
         <td>${esc(s.project)}</td><td class="num">${esc(s.unit)||'—'}</td><td>${esc(s.customer)}</td><td>${esc(s.person)}</td>
         <td class="r num">${fmt(s.value)}</td>
         <td class="r num">${fmt(s.received)}</td>
         <td><span class="pill ${payPill(pay)}">${payLabel(pay)}</span></td>
-        <td><select style="padding:5px 8px;font-size:11.5px" data-prev="${esc(s.status)}" onchange="changeBookingStatus('${esc(s.id)}', this.value, this)">
+        <td>${ME.role === 'viewer' ? esc(s.status) : `<select style="padding:5px 8px;font-size:11.5px" data-prev="${esc(s.status)}" onchange="changeBookingStatus('${esc(s.id)}', this.value, this)">
           ${opts.map(st => `<option ${st===s.status?'selected':''}>${esc(st)}</option>`).join('')}
-        </select></td>
+        </select>`}</td>
         <td>${s.billStatus ? `<span class="pill ${billPill(s.billStatus)}">${esc(billLabel(s.billStatus))}</span>` : '<span class="hint">Not raised</span>'}</td>
-        <td class="r">
+        <td class="r wr">
           ${canRaise ? `<button class="btn ghost" style="padding:5px 12px;font-size:11.5px" onclick="raiseBill('${esc(s.id)}')">Raise bill</button>` : ''}
           ${canReceive ? `<button class="btn ghost" style="padding:5px 12px;font-size:11.5px;margin-left:6px;color:var(--jade);border-color:rgba(60,228,164,.4)" onclick="markReceived('${esc(s.id)}')">Mark received</button>` : ''}
           ${canPrint ? `<button class="btn ghost" style="padding:5px 12px;font-size:11.5px;margin-left:6px" onclick="printInvoice('${esc(s.id)}')">Invoice</button>` : ''}
@@ -1868,7 +2037,7 @@ async function raiseBill(bookingId) {
       const d = await apiGet('data'); if (!d.error) DB = d;
     } else {
       const row = DB.sales.find(x => String(x['Booking ID']||'').trim() === String(bookingId).trim());
-      if (row) { row['Bill Status']='Invoiced'; row['Invoice No']='INV-DEMO'; row['Invoice Date']=new Date().toISOString().slice(0,10); row['Invoice Amount']=amount; }
+      if (row) { row['Bill Status']='Invoiced'; row['Invoice No']='INV-DEMO'; row['Invoice Date']=ymdLocal(new Date()); row['Invoice Amount']=amount; }
       invoiceNo = 'INV-DEMO (demo session)';
     }
     toast('Bill raised · ' + invoiceNo);
@@ -1885,7 +2054,7 @@ async function markReceived(bookingId) {
       const d = await apiGet('data'); if (!d.error) DB = d;
     } else {
       const row = DB.sales.find(x => String(x['Booking ID']||'').trim() === String(bookingId).trim());
-      if (row) { row['Bill Status']='Received'; row['Commission Received Date']=new Date().toISOString().slice(0,10); }
+      if (row) { row['Bill Status']='Received'; row['Commission Received Date']=ymdLocal(new Date()); }
     }
     toast(bookingId + ' marked received');
     renderAll();
@@ -1941,11 +2110,11 @@ function renderBudget(A) {
 }
 
 function renderRulesAndPayables(A) {
-  $('tblRules').innerHTML = `<tr><th>Rule</th><th class="r">Value</th><th>Applies to</th><th class="r" style="min-width:170px">Update</th></tr>` +
+  $('tblRules').innerHTML = `<tr><th>Rule</th><th class="r">Value</th><th>Applies to</th><th class="r adm" style="min-width:170px">Update</th></tr>` +
     RULE_META.map(([key, label, desc, unit], i) =>
       `<tr><td>${label}</td><td class="r num">${A.rules[key]}${unit==='%'?'%':''}</td>
        <td style="color:var(--muted);font-size:12px">${desc}</td>
-       <td class="r"><input type="number" step="${unit==='%'?'0.05':'500'}" id="rule_${i}" value="${A.rules[key]}" style="width:90px;padding:6px 9px;font-size:12px">
+       <td class="r adm"><input type="number" step="${unit==='%'?'0.05':'500'}" id="rule_${i}" value="${A.rules[key]}" style="width:90px;padding:6px 9px;font-size:12px">
        <button class="btn ghost" style="padding:5px 11px;font-size:11.5px;margin-left:5px" onclick="saveRule('${key}','rule_${i}')">Save</button></td></tr>`).join('');
 
   $('tblPayables').innerHTML = `<tr><th>Head</th><th class="r">Accrued</th><th class="r">Paid (logged)</th><th class="r">Outstanding</th></tr>` +
@@ -2018,7 +2187,7 @@ function renderProjectLifeBudget(A, scope) {
     `<div class="card kpi"><div class="lbl">${l}</div><div class="val num">–</div><div class="delta ${cls||'flat'}">${d}</div></div>`).join('');
   document.querySelectorAll('#budCards .val').forEach((el,i) => countUp(el, cards[i][1], cards[i][2]));
 
-  $('tblBudget').innerHTML = `<tr><th>Head</th><th class="r">Total budget (project life)</th><th class="r">Spent to date</th><th class="r">Remaining</th><th class="r">Utilization</th><th class="r">Avg / month</th><th class="r" style="min-width:200px">Set total budget</th></tr>` +
+  $('tblBudget').innerHTML = `<tr><th>Head</th><th class="r">Total budget (project life)</th><th class="r">Spent to date</th><th class="r">Remaining</th><th class="r">Utilization</th><th class="r">Avg / month</th><th class="r adm" style="min-width:200px">Set total budget</th></tr>` +
     rows.map((r,i) => {
       const util = r.util==null ? '<span class="pill warn">no budget</span>'
         : `<span class="pill ${r.util<=0.9?'good':r.util<=1.05?'warn':'risk'}">${pct(r.util)}</span>`;
@@ -2026,7 +2195,7 @@ function renderProjectLifeBudget(A, scope) {
         <td class="r num">${fmt(r.actual)}</td>
         <td class="r num" style="color:${r.budget<=0?'var(--muted)':r.remaining>=0?'var(--jade)':'var(--ember)'}">${r.budget>0?fmt(r.remaining):'–'}</td>
         <td class="r">${util}</td><td class="r num" style="color:var(--cyan)">${fmt(r.perMonth)}</td>
-        <td class="r"><input type="number" id="bud_${i}" value="${Math.round(r.budget)||''}" placeholder="total ₹" style="width:120px;padding:6px 9px;font-size:12px">
+        <td class="r adm"><input type="number" id="bud_${i}" value="${Math.round(r.budget)||''}" placeholder="total ₹" style="width:120px;padding:6px 9px;font-size:12px">
         <button class="btn ghost" style="padding:5px 11px;font-size:11.5px;margin-left:5px" onclick="saveBudget('${esc(r.name)}','bud_${i}','${esc(scope)}','total')">Save</button></td></tr>`;
     }).join('');
   $('budHint').innerHTML = `<b>Project view = one fixed budget for the whole life of ${esc(scope)}</b>, not per month. "Spent to date" counts everything since the project's first booking or expense — the FY/month filters at the top don't apply here. Per-booking costs (brokerage, bonuses, incentives) are accrued from bookings; <b>Payroll is added automatically</b> from the Team sheet for everyone whose Site is ${esc(scope)} (monthly salary × months worked, from Joining Date). Central costs are not included here — they sit in the company-wide budget. Runway = remaining budget ÷ average monthly spend so far.`;
@@ -2309,7 +2478,7 @@ function renderTeam(A) {
     else countUp(el, cards[i][1], cards[i][2]);
   });
 
-  $('tblTeam').innerHTML = `<tr><th>Name</th><th>Role</th><th>Site</th><th>Incentive type</th><th class="r">Incentive value</th><th class="r">Bookings</th><th class="r">Sales value</th><th class="r">Fee generated</th><th class="r">Recovered</th><th class="r">Walk-ins</th><th class="r">Salary (period)</th><th class="r">Incentive</th><th class="r">Fee ÷ Cost</th><th class="r">Target</th><th class="r">Actions</th></tr>` +
+  $('tblTeam').innerHTML = `<tr><th>Name</th><th>Role</th><th>Site</th><th>Incentive type</th><th class="r">Incentive value</th><th class="r">Bookings</th><th class="r">Sales value</th><th class="r">Fee generated</th><th class="r">Recovered</th><th class="r">Walk-ins</th><th class="r">Salary (period)</th><th class="r">Incentive</th><th class="r">Fee ÷ Cost</th><th class="r">Target</th><th class="r adm">Actions</th></tr>` +
     (T.length ? T.map(t => {
       const roiPill = t.roi==null ? (t.onRoster?'–':'<span class="pill warn">not on roster</span>')
         : `<span class="pill ${t.roi>=3?'good':t.roi>=1.5?'warn':'risk'}">${t.roi.toFixed(1)}×</span>`;
@@ -2328,7 +2497,7 @@ function renderTeam(A) {
         <td class="r num">${t.bookings}</td><td class="r num">${fmt(t.gdv)}</td><td class="r num">${fmt(t.fee)}</td>
         <td class="r num">${recovered}</td><td class="r num">${walkins}</td>
         <td class="r num">${t.onRoster?fmt(t.salary*t.empMonths):'–'}</td><td class="r num">${fmt(t.incentive)}</td>
-        <td class="r">${roiPill}</td><td class="r">${tgt}</td><td class="r">${editBtn}</td></tr>`;
+        <td class="r">${roiPill}</td><td class="r">${tgt}</td><td class="r adm">${editBtn}</td></tr>`;
     }).join('') : '<tr><td colspan="15" class="empty">Add team members below — bookings match by sales person name</td></tr>');
 
   killChart('team');
@@ -2356,7 +2525,7 @@ function renderRecoveryList(A) {
   const rows = normRecovery().filter(r => inRange(r.date)).sort((a,b) => b.date - a.date).slice(0, 60);
   if (!rows.length) { tbl.innerHTML = '<tr><td class="empty">No recoveries logged in this period.</td></tr>'; return; }
   tbl.innerHTML = `<tr><th>Date</th><th>CRM person</th><th>Booking</th><th>Customer</th><th class="r">Amount recovered</th></tr>` +
-    rows.map(r => `<tr><td class="num">${r.date.toISOString().slice(0,10)}</td><td>${esc(r.person)}</td>
+    rows.map(r => `<tr><td class="num">${ymdLocal(r.date)}</td><td>${esc(r.person)}</td>
       <td class="num">${esc(r.bookingId)||'–'}</td><td>${esc(r.customer)||'–'}</td>
       <td class="r num">${fmt(r.amount)}</td></tr>`).join('');
 }
@@ -2367,7 +2536,7 @@ function renderWalkinList(A) {
   const rows = normWalkin().filter(w => inRange(w.date)).sort((a,b) => b.date - a.date).slice(0, 60);
   if (!rows.length) { tbl.innerHTML = '<tr><td class="empty">No walk-ins logged in this period.</td></tr>'; return; }
   tbl.innerHTML = `<tr><th>Date</th><th>Project</th><th>Credited to</th><th>Customer</th><th>Booking</th></tr>` +
-    rows.map(w => `<tr><td class="num">${w.date.toISOString().slice(0,10)}</td><td>${esc(w.project)||'–'}</td><td>${esc(w.person)}</td>
+    rows.map(w => `<tr><td class="num">${ymdLocal(w.date)}</td><td>${esc(w.project)||'–'}</td><td>${esc(w.person)}</td>
       <td>${esc(w.customer)||'–'}</td><td class="num">${esc(w.bookingId)||'–'}</td></tr>`).join('');
 }
 
@@ -2719,13 +2888,6 @@ $('saveSale').onclick = function() {
     'CP Brokerage':p.brokerage,'CP Incentive':p.cpIncentive,'Referral Payout':p.referralPayout,'Exec Incentive':p.execIncentive }));
 };
 
-$('saveExpense').onclick = function() {
-  const p = { action:'addExpense', date:$('eDate').value, scope:$('eScope').value,
-    category:$('eCategory').value, description:$('eDesc').value, amount:$('eAmount').value };
-  if (!p.date || !p.category || !p.amount) return toast('Date, category and amount are required');
-  submit(this, p, () => DB.expenses.push({ 'Expense ID':'EX-DEMO','Date':p.date,'Scope':p.scope,'Category':p.category,'Description':p.description,'Amount':p.amount }));
-};
-
 $('saveProject').onclick = function() {
   const p = { action:'addProject', name:$('pName').value, location:$('pLoc').value,
     totalUnits:$('pUnits').value, totalArea:$('pArea').value, status:$('pStatus').value,
@@ -2781,8 +2943,8 @@ function editEmployee(name) {
   $('tIncentiveType').value = ['Recovery','Manual','Walkin'].includes(e.incType) ? e.incType : 'Per Booking';
   $('tRecoveryTarget').value = e.recoveryTarget || ''; $('tTarget').value = e.target || '';
   $('tStatus').value = e.status || 'Active';
-  $('tJoinDate').value = e.joinDate ? e.joinDate.toISOString().slice(0,10) : '';
-  $('tExitDate').value = e.exitDate ? e.exitDate.toISOString().slice(0,10) : '';
+  $('tJoinDate').value = e.joinDate ? ymdLocal(e.joinDate) : '';
+  $('tExitDate').value = e.exitDate ? ymdLocal(e.exitDate) : '';
   toggleIncentiveFields();
   $('saveEmployee').textContent = 'Update member';
   $('cancelEditEmployee').style.display = '';
@@ -2812,6 +2974,211 @@ $('saveWalkin').onclick = function() {
   if (!p.date || !p.person) return toast('Date and person are required');
   submit(this, p, () => (DB.walkins = DB.walkins || []).push({ 'Walk-in ID':'WI-DEMO','Date':p.date,'Project':p.project,
     'Person':p.person,'Customer':p.customer,'Booking ID':p.bookingId }));
+};
+
+/* ════════════════ EXPENSE GUARD — duplicate watch, risk flags, safe delete ════════════════ */
+const EXPG = { nearDays: 7, vendorDays: 20, maxRows: 300 };
+
+/* Every logged expense (ALL periods) with the guard fields. Auto-salary is not in here. */
+function expRows_() {
+  return (DB.expenses || []).map((r, idx) => {
+    const m = keymap(r);
+    return {
+      idx,
+      id: String(pick(m, 'expense id', 'id') || '').trim(),
+      date: toDate(pick(m, 'date', 'expense date')),
+      scope: String(pick(m, 'scope', 'project', 'site', 'allocation') || 'CENTRAL').trim(),
+      category: String(pick(m, 'category', 'expense head', 'head', 'type') || 'Other').trim(),
+      desc: String(pick(m, 'description', 'desc', 'particulars', 'details') || '').trim(),
+      amount: toNum(pick(m, 'amount', 'value', 'cost', 'expense')),
+      vendor: String(pick(m, 'vendor', 'vendor name', 'payee') || '').trim(),
+      billNo: String(pick(m, 'bill no', 'bill number') || '').trim(),
+      flags: String(pick(m, 'risk flags', 'flags') || '').trim(),
+      by: String(pick(m, 'entered by', 'added by') || '').trim()
+    };
+  }).filter(e => e.date && e.amount > 0);
+}
+
+/* Finds pairs of entries that look like the same bill logged twice (same rules as the server). */
+function findExpenseDuplicates(rows) {
+  const pairs = new Map();
+  const sameAmt = (x, y) => Math.abs(x.amount - y.amount) < 0.5;
+  const put = (a, b, level, why) => {
+    const k = a.idx + '|' + b.idx, cur = pairs.get(k);
+    if (!cur || (level === 'high' && cur.level !== 'high')) pairs.set(k, { a, b, level, why });
+  };
+  // same bill number (any dates)
+  const withBill = rows.filter(r => r.billNo);
+  for (let i = 0; i < withBill.length; i++) {
+    for (let j = i + 1; j < withBill.length; j++) {
+      const a = withBill[i], b = withBill[j];
+      if (nkey(a.billNo) !== nkey(b.billNo)) continue;
+      if (a.vendor && b.vendor && nkey(a.vendor) !== nkey(b.vendor)) continue;
+      put(a, b, 'high', sameAmt(a, b) ? 'Same bill no. and amount' : 'Same bill no. but different amount — possible altered bill');
+    }
+  }
+  // close in time, same amount
+  const sorted = rows.slice().sort((x, y) => x.date - y.date);
+  const reach = Math.max(EXPG.nearDays, EXPG.vendorDays);
+  for (let i = 0; i < sorted.length; i++) {
+    for (let j = i + 1; j < sorted.length; j++) {
+      const a = sorted[i], b = sorted[j];
+      const gap = Math.round((b.date - a.date) / 86400000);
+      if (gap > reach) break;
+      if (!sameAmt(a, b)) continue;
+      if (gap === 0 && nkey(a.scope) === nkey(b.scope) && nkey(a.category) === nkey(b.category))
+        put(a, b, 'high', 'Same date, project, category and amount');
+      else if (nkey(a.category) === nkey(b.category) && gap <= EXPG.nearDays)
+        put(a, b, 'medium', 'Same category and amount, ' + gap + ' day(s) apart');
+      else if (a.vendor && nkey(a.vendor) === nkey(b.vendor) && gap <= EXPG.vendorDays)
+        put(a, b, 'medium', 'Same vendor and amount, ' + gap + ' day(s) apart');
+    }
+  }
+  return [...pairs.values()].sort((p, q) =>
+    (p.level === q.level ? 0 : p.level === 'high' ? -1 : 1) || (q.b.date - p.b.date));
+}
+
+function expEntryCell_(e) {
+  return `${ymdLocal(e.date)} · ${esc(e.category)} · <b>${fmt(e.amount)}</b>${e.vendor ? ' · ' + esc(e.vendor) : ''}`
+    + `<br><span class="hint">${esc(e.id) || 'no ID'}${e.billNo ? ' · bill ' + esc(e.billNo) : ''} · ${esc(e.scope)}</span>`;
+}
+function expDeleteBtn_(e) {
+  return e.id
+    ? `<button class="btn ghost" style="padding:5px 11px;font-size:11.5px;color:var(--ember);border-color:rgba(255,111,98,.4)" onclick="deleteExpense('${esc(e.id)}')">Delete</button>`
+    : '<span class="hint">no ID</span>';
+}
+
+function renderExpenseList() {
+  const tbl = $('tblExpenses');
+  if (!tbl) return;
+  const rows = expRows_();
+  const pairs = findExpenseDuplicates(rows);
+  const dupIdx = new Set();
+  pairs.forEach(p => { dupIdx.add(p.a.idx); dupIdx.add(p.b.idx); });
+  const flagged = rows.filter(r => r.flags);
+
+  // summary strip
+  const high = pairs.filter(p => p.level === 'high').length;
+  $('expSummary').innerHTML = [
+    ['Entries logged', String(rows.length), 'all periods'],
+    ['Total logged', fmt(rows.reduce((a, r) => a + r.amount, 0)), 'excludes auto-salary'],
+    ['Risk-flagged', String(flagged.length), 'worth a second look'],
+    ['Possible duplicates', String(pairs.length), high + ' high · ' + (pairs.length - high) + ' medium']
+  ].map(([l, v, d], i) => `<div class="card kpi"><div class="lbl">${l}</div><div class="val num" style="${i >= 2 && v !== '0' ? 'color:var(--amber)' : ''}">${v}</div><div class="delta flat">${d}</div></div>`).join('');
+
+  // duplicate watch
+  const dupTbl = $('tblExpDup');
+  dupTbl.innerHTML = pairs.length
+    ? `<tr><th style="position:sticky;top:0;background:#0c1220">Match</th><th style="position:sticky;top:0;background:#0c1220">Why</th><th style="position:sticky;top:0;background:#0c1220">Entry A</th><th style="position:sticky;top:0;background:#0c1220">Entry B</th><th class="r adm" style="position:sticky;top:0;background:#0c1220">Delete one</th></tr>`
+      + pairs.slice(0, 60).map(p => `<tr>
+        <td><span class="pill ${p.level === 'high' ? 'risk' : 'warn'}">${p.level}</span></td>
+        <td style="font-size:12.5px">${esc(p.why)}</td>
+        <td style="font-size:12.5px;font-weight:400">${expEntryCell_(p.a)}</td>
+        <td style="font-size:12.5px;font-weight:400">${expEntryCell_(p.b)}</td>
+        <td class="r adm" style="white-space:nowrap">${expDeleteBtn_(p.a)} ${expDeleteBtn_(p.b)}</td></tr>`).join('')
+      + (pairs.length > 60 ? `<tr><td colspan="5" class="hint">Showing the first 60 of ${pairs.length} matches.</td></tr>` : '')
+    : '<tr><td class="empty">No duplicate patterns found in the logged expenses. ✓</td></tr>';
+
+  // full list
+  const q = nkey($('expSearch').value), mode = $('expFilter').value;   // ignores spaces/dashes: "S-9" finds "s 9"
+  let list = rows.filter(r => !q || nkey([r.id, r.vendor, r.billNo, r.category, r.scope, r.desc].join(' ')).indexOf(q) !== -1)
+    .filter(r => mode === 'all' || (mode === 'flagged' && r.flags) || (mode === 'dupes' && dupIdx.has(r.idx)))
+    .sort((a, b) => (b.date - a.date) || String(b.id).localeCompare(String(a.id)));
+  const total = list.length;
+  list = list.slice(0, EXPG.maxRows);
+  const th = 'position:sticky;top:0;background:#0c1220;z-index:1';
+  tbl.innerHTML = list.length
+    ? `<tr><th style="${th}">ID</th><th style="${th}">Date</th><th style="${th}">Scope</th><th style="${th}">Category</th><th style="${th}">Vendor</th><th style="${th}">Bill no.</th><th style="${th}">Description</th><th class="r" style="${th}">Amount</th><th style="${th}">Entered by</th><th style="${th}">Flags</th><th class="r adm" style="${th}"></th></tr>`
+      + list.map(r => `<tr>
+        <td class="num">${esc(r.id) || '–'}</td><td class="num">${ymdLocal(r.date)}</td>
+        <td>${esc(r.scope)}</td><td>${esc(r.category)}</td>
+        <td>${esc(r.vendor) || '<span class="hint">–</span>'}</td><td class="num">${esc(r.billNo) || '<span class="hint">–</span>'}</td>
+        <td style="font-weight:400;color:var(--muted);font-size:12.5px">${esc(r.desc)}</td>
+        <td class="r num">${fmt(r.amount)}</td>
+        <td style="font-weight:400;color:var(--muted);font-size:12.5px">${esc(r.by) || '–'}</td>
+        <td style="font-weight:400;font-size:11.5px;min-width:160px">${dupIdx.has(r.idx) ? '<span class="pill risk">dup?</span> ' : ''}${r.flags ? r.flags.split(' | ').map(f => `<div style="color:var(--amber)">⚑ ${esc(f)}</div>`).join('') : ''}</td>
+        <td class="r adm">${expDeleteBtn_(r)}</td></tr>`).join('')
+      + (total > list.length ? `<tr><td colspan="11" class="hint">Showing the latest ${list.length} of ${total} — use search to narrow.</td></tr>` : '')
+    : '<tr><td class="empty">Nothing matches.</td></tr>';
+}
+
+async function deleteExpense(id) {
+  if (!isAdmin()) return toast('Only an admin can delete expenses');
+  const e = expRows_().find(x => x.id === String(id));
+  if (!e) return toast('Expense not found — refresh and try again');
+  const reason = prompt(`Delete ${id}?\n${ymdLocal(e.date)} · ${e.category} · ${fmt(e.amount)}${e.vendor ? ' · ' + e.vendor : ''}\n\nA copy is kept in the Expense_Audit sheet. Type the reason for deleting:`, '');
+  if (reason === null) return;
+  if (reason.trim().length < 3) return toast('A reason is needed to delete (at least 3 letters)');
+  try {
+    if (CONFIG.API_URL) {
+      const r = await apiPost({ action: 'deleteExpense', expenseId: id, reason: reason.trim() });
+      if (r.error) throw new Error(r.error);
+      const d = await apiGet('data'); if (!d.error) DB = d;
+    } else {
+      DB.expenses = (DB.expenses || []).filter(x => String(x['Expense ID'] || '').trim() !== String(id));
+    }
+    toast(id + ' deleted · copy kept in Expense_Audit');
+    renderAll();
+  } catch (err) { toast('Failed: ' + err.message); }
+}
+
+/* Save: the server checks for duplicates first; if it finds some, ask before saving anyway. */
+$('saveExpense').onclick = async function() {
+  const btn = this;
+  const p = { action: 'addExpense', date: $('eDate').value, scope: $('eScope').value,
+    category: $('eCategory').value, description: $('eDesc').value, amount: $('eAmount').value,
+    vendor: $('eVendor').value.trim(), billNo: $('eBillNo').value.trim() };
+  if (!p.date || !p.category || !p.amount) return toast('Date, category and amount are required');
+  if (!(Number(p.amount) > 0)) return toast('Amount must be more than zero');
+  btn.disabled = true;
+  try {
+    let msg;
+    if (!CONFIG.API_URL) {
+      DB.expenses.push({ 'Expense ID': 'EX-DEMO' + Date.now(), 'Date': p.date, 'Scope': p.scope, 'Category': p.category,
+        'Description': p.description, 'Amount': p.amount, 'Vendor': p.vendor, 'Bill No': p.billNo });
+      msg = 'Saved to demo session (set API_URL to persist)';
+    } else {
+      let r = await apiPost(p);
+      if (r.error) throw new Error(r.error);
+      if (r.needsConfirm) {
+        const lines = [...(r.blocks || []), ...(r.warns || [])].map(x => '• ' + x.msg).join('\n');
+        const ok = confirm((r.blocks && r.blocks.length ? '⛔ This looks like a DUPLICATE:\n\n' : '⚠ This may be a duplicate:\n\n')
+          + lines + '\n\nOK = save it anyway (the override is recorded in the audit trail)\nCancel = stop');
+        if (!ok) { toast('Not saved — duplicate check stopped it'); btn.disabled = false; return; }
+        r = await apiPost({ ...p, force: true });
+        if (r.error) throw new Error(r.error);
+      }
+      msg = 'Saved · ' + r.id + ((r.flags || []).length ? ' · ⚑ ' + r.flags.length + ' flag(s) — see list below' : '');
+      const d = await apiGet('data'); if (!d.error) DB = d;
+    }
+    ['eAmount', 'eDesc', 'eVendor', 'eBillNo'].forEach(id => $(id).value = '');   // clear so a re-click can't resubmit
+    toast(msg);
+    initFilters(); renderAll();
+  } catch (err) { toast('Failed: ' + err.message); }
+  btn.disabled = false;
+};
+if ($('expSearch')) $('expSearch').addEventListener('input', renderExpenseList);
+if ($('expFilter')) $('expFilter').addEventListener('change', renderExpenseList);
+
+/* ════════════════ LOGIN / PASSWORD / LOGOUT WIRING ════════════════ */
+$('lgBtn').onclick = doLogin;
+$('lgPass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+$('lgUser').addEventListener('keydown', e => { if (e.key === 'Enter') $('lgPass').focus(); });
+$('logoutBtn').onclick = () => { clearSession(); location.reload(); };
+$('pwBtn').onclick = () => { ['pwOld','pwNew','pwNew2'].forEach(id => $(id).value = ''); $('pwMsg').textContent = ''; $('pwModal').classList.add('show'); $('pwOld').focus(); };
+$('pwCancel').onclick = () => $('pwModal').classList.remove('show');
+$('pwSave').onclick = async () => {
+  const o = $('pwOld').value, n = $('pwNew').value, n2 = $('pwNew2').value;
+  if (!o || !n) { $('pwMsg').textContent = 'Fill in all the boxes.'; return; }
+  if (n.length < 8) { $('pwMsg').textContent = 'New password must be at least 8 characters.'; return; }
+  if (n !== n2) { $('pwMsg').textContent = 'The two new passwords do not match.'; return; }
+  $('pwSave').disabled = true; $('pwMsg').textContent = 'Saving…';
+  try {
+    const r = await apiPost({ action: 'changePassword', oldPassword: o, newPassword: n });
+    if (r.error) { $('pwMsg').textContent = r.error; }
+    else { $('pwModal').classList.remove('show'); toast('Password changed'); }
+  } catch (e) { if (!e.auth) $('pwMsg').textContent = 'Failed: ' + e.message; }
+  $('pwSave').disabled = false;
 };
 
 /* ════════════════ NAV & FILTERS ════════════════ */
@@ -2949,7 +3316,8 @@ function demoData() {
   return { projects, sales, expenses, team, budgets, rules, sources, expenseCategories, generatedAt: new Date().toISOString() };
 }
 
-loadData();
+/* ── start ──  demo mode (no API_URL) skips login; otherwise sign in first unless a valid session is saved */
+if (!CONFIG.API_URL || SESSION.token) loadData(); else showLogin('');
 </script>
 </body>
 </html>
