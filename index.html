@@ -231,6 +231,10 @@ td.r,th.r{text-align:right}
 body:not(.role-admin) .adm{display:none!important}
 body.role-viewer .wr{display:none!important}
 
+#busy{position:fixed;top:12px;right:16px;z-index:95;display:none;align-items:center;gap:9px;padding:8px 14px;border-radius:999px;font-size:12px;color:var(--text);
+  background:rgba(10,15,30,.94);border:1px solid rgba(240,188,82,.4);box-shadow:var(--glow-brass)}
+#busy.on{display:flex}
+#busy .spin{width:14px;height:14px;-webkit-mask:radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));mask:radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px))}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}body::before,body::after{animation:none!important}}
 @media(max-width:940px){
   .rail{padding:11px 14px;gap:5px}
@@ -629,7 +633,7 @@ body.role-viewer .wr{display:none!important}
         <div style="max-height:460px;overflow-y:auto;overflow-x:auto;border:1px solid var(--line);border-radius:12px">
           <table id="tblBookings"></table>
         </div>
-        <p class="hint" style="margin-top:10px">Status dropdown offers Booked / Agreement Done / Cancelled — change it to "Agreement Done" to unlock "Raise bill" on that row. Bill amount = agreement value × the project's commission rate (per-project, editable in the Projects tab). "Mark received" appears once a bill has been raised. <b>Commission due</b> / <b>Commission bill</b> are both about Realtech's own commission, not whether the customer has paid the developer — Due means the bill hasn't been received yet (whether or not it's been raised), Received means it has. Every status change updates the live Sales_Log immediately. This list shows every booking matching the filters above — scroll the box to see more; the top nav's FY/month/project filters don't apply here.</p>
+        <p class="hint" style="margin-top:10px">Status dropdown offers Booked / Agreement Done / Cancelled — change it to "Agreement Done" to unlock "Raise bill" on that row. Bill amount = agreement value × the project's commission rate (per-project, editable in the Projects tab). "Mark received" appears once a bill has been raised. <b>Commission due</b> / <b>Commission bill</b> are both about Realtech's own commission, not whether the customer has paid the developer — Due means the bill hasn't been received yet (whether or not it's been raised), Received means it has. Every status change updates the live Sales_Log immediately. This list shows the latest 300 bookings matching the filters above (the totals above count all of them) — narrow the filters to reach older ones; the top nav's FY/month/project filters don't apply here.</p>
       </div>
     </section>
 
@@ -705,6 +709,7 @@ body.role-viewer .wr{display:none!important}
 </div>
 
 <div id="toast"></div>
+<div id="busy"><div class="spin"></div><span>Working with Google Sheets…</span></div>
 
 <script>
 /* ════════════════════════════════════════════════════════════
@@ -825,7 +830,7 @@ async function doLogin() {
    Primary: fetch. Fallback: JSONP (script tag) — immune to CORS, works with
    any Apps Script deployment set to "Anyone". Writes fall back to GET params.
    Every call carries the login token; a "not signed in" reply brings back the login screen. */
-function jsonp(params) {
+function jsonp(params, timeoutMs) {
   return new Promise((resolve, reject) => {
     const cb = '__bp_cb' + Date.now() + Math.floor(Math.random()*1e4);
     const s = document.createElement('script');
@@ -836,36 +841,54 @@ function jsonp(params) {
     const q = new URLSearchParams({ ...full, callback: cb }).toString();
     s.src = CONFIG.API_URL + (CONFIG.API_URL.includes('?') ? '&' : '?') + q;
     document.body.appendChild(s);
-    setTimeout(() => { if (window[cb]) { clean(); reject(new Error('Apps Script timed out')); } }, 25000);
+    const ms = timeoutMs || 60000;
+    setTimeout(() => { if (window[cb]) { clean(); reject(new Error('Apps Script is taking too long (over ' + Math.round(ms/1000) + ' seconds). If you were saving, refresh and check the list before saving again.')); } }, ms);
   });
 }
+let BUSY = 0;
+function busy_(d) { BUSY += d; const el = $('busy'); if (el) el.classList.toggle('on', BUSY > 0); }
+const newReqId_ = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+/* A save's reply carries the table(s) it changed, freshly read — so the page doesn't have to download everything again. */
+function applyRefresh_(res) {
+  if (res && res.refresh) Object.keys(res.refresh).forEach(k => { DB[k] = res.refresh[k]; });
+  return res;
+}
 async function apiGet(action) {
-  let res;
+  busy_(1);
   try {
-    const r = await fetch(CONFIG.API_URL + '?action=' + action + '&token=' + encodeURIComponent(SESSION.token || ''), { redirect: 'follow' });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    res = await r.json();
-  } catch (e) {
-    console.warn('fetch GET failed → JSONP fallback:', e.message);
-    res = await jsonp({ action });
-  }
-  return handleAuth_(res);
+    let res;
+    try {
+      const r = await fetch(CONFIG.API_URL + '?action=' + action + '&token=' + encodeURIComponent(SESSION.token || ''), { redirect: 'follow' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      res = await r.json();
+    } catch (e) {
+      console.warn('fetch GET failed → JSONP fallback:', e.message);
+      res = await jsonp({ action }, 60000);
+    }
+    return handleAuth_(res);
+  } finally { busy_(-1); }
 }
 async function apiPost(payload) {
-  let res;
+  busy_(1);
   try {
-    const r = await fetch(CONFIG.API_URL, {
-      method: 'POST', redirect: 'follow',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ ...payload, token: SESSION.token })
-    });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    res = await r.json();
-  } catch (e) {
-    console.warn('fetch POST failed → JSONP fallback:', e.message);
-    res = await jsonp(payload);   // backend accepts writes via GET params too
-  }
-  return handleAuth_(res);
+    // One request id per save. If the browser has to retry (slow/failed reply), the server recognises the id
+    // and answers from memory instead of saving a second time.
+    const body = { ...payload, reqId: payload.reqId || newReqId_() };
+    let res;
+    try {
+      const r = await fetch(CONFIG.API_URL, {
+        method: 'POST', redirect: 'follow',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ ...body, token: SESSION.token })
+      });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      res = await r.json();
+    } catch (e) {
+      console.warn('fetch POST failed → JSONP fallback (same request id, so it cannot double-save):', e.message);
+      res = await jsonp(body, 90000);   // backend accepts writes via GET params too
+    }
+    return applyRefresh_(handleAuth_(res));
+  } finally { busy_(-1); }
 }
 
 async function loadData() {
@@ -894,7 +917,8 @@ async function loadData() {
         setConn('demo', 'Live · 0 bookings found');
         toast('Connected to the Sheet, but Sales_Log has no data rows yet');
       } else {
-        setConn('live', 'Live · ' + nb + ' bookings · ' + ne + ' expenses');
+        setConn('live', 'Live · ' + nb + ' bookings · ' + ne + ' expenses' + (d._ms ? ' · server ' + (d._ms/1000).toFixed(1) + 's' : ''));
+        if (d.timing) console.info('Server timing (ms):', d.timing);
       }
     }
     initFilters();
@@ -1037,6 +1061,7 @@ function canonSource(s) {
 
 /* ── normalise rows ── */
 function normSales() {
+  const rateCache = {};   // commission rate looked up once per project, not once per booking
   return (DB.sales || []).map(r => {
     const m = keymap(r);
     const value = toNum(pick(m, 'agreement value', 'value', 'sale value', 'deal value', 'agreement cost', 'flat value', 'amount'));
@@ -1050,7 +1075,7 @@ function normSales() {
       source: canonSource(pick(m, 'source', 'lead source', 'channel')),
       sub: pick(m, 'sub-source', 'sub source', 'cp name', 'campaign') || '',
       person: String(pick(m, 'sales person', 'salesperson', 'sales executive', 'executive', 'closed by', 'person') || '').trim(),
-      value, fee: value * rateOf(project),
+      value, fee: value * (rateCache[project] ?? (rateCache[project] = rateOf(project))),
       received: toNum(pick(m, 'amount received', 'received', 'booking amount', 'token amount', 'token')),
       status: canonStatus(pick(m, 'status', 'booking status') || 'Booked'),
       brokerage: optNum(pick(m, 'cp brokerage', 'brokerage')),
@@ -1895,7 +1920,7 @@ async function tokenAction(bookingId, status) {
       if (row) row['Status'] = status;
     }
     toast(bookingId + ' → ' + status);
-    if (CONFIG.API_URL) { const d = await apiGet('data'); if (!d.error) DB = d; }
+    if (CONFIG.API_URL) { /* the save reply already carried the refreshed table */ }
     renderAll();
   } catch (e) { toast('Failed: ' + e.message); }
 }
@@ -1905,6 +1930,7 @@ function paymentStatusOf(s) {
   return s.billStatus === 'Received' ? 'Paid' : 'Pending';
 }
 
+const BK_CAP = 300;
 function renderBookingsList() {
   const tbl = $('tblBookings');
   if (!tbl) return;
@@ -1937,6 +1963,7 @@ function renderBookingsList() {
   ].map(([l,v,f]) => `<div class="card kpi" style="padding:16px 18px"><div class="lbl">${l}</div><div class="val num" style="font-size:19px;margin-top:6px">${f(v)}</div></div>`).join('');
 
   if (!rows.length) { tbl.innerHTML = '<tr><td class="empty">No bookings match these filters.</td></tr>'; return; }
+  const shown = rows.slice(0, BK_CAP);   // drawing thousands of table rows at once makes the page crawl
   const billPill = b => b === 'Received' ? 'good' : b === 'Invoiced' ? 'warn' : '';
   const billLabel = b => b === 'Received' ? 'Commission received' : b === 'Invoiced' ? 'Bill raised' : b;
   const payPill = p => p === 'Paid' ? 'good' : 'warn';
@@ -1944,7 +1971,7 @@ function renderBookingsList() {
   const STATUS_OPTS = ['Booked','Agreement Done','Cancelled'];
   const thStyle = 'position:sticky;top:0;background:#0c1220;z-index:1';
   tbl.innerHTML = `<tr><th style="${thStyle}">#</th><th style="${thStyle}">Booking</th><th style="${thStyle}">Date</th><th style="${thStyle}">Project</th><th style="${thStyle}">Unit</th><th style="${thStyle}">Customer</th><th style="${thStyle}">Sales person</th><th class="r" style="${thStyle}">Agreement value</th><th class="r" style="${thStyle}">Received</th><th style="${thStyle}">Commission due</th><th style="${thStyle}">Status</th><th style="${thStyle}">Commission bill</th><th class="r wr" style="min-width:210px;${thStyle}">Actions</th></tr>` +
-    rows.map((s, i) => {
+    shown.map((s, i) => {
       const canRaise = (s.status === 'Agreement Done' || s.status === 'Registered') && s.billStatus !== 'Invoiced' && s.billStatus !== 'Received';
       const canReceive = s.billStatus === 'Invoiced';
       const canPrint = s.billStatus === 'Invoiced' || s.billStatus === 'Received';
@@ -1968,7 +1995,7 @@ function renderBookingsList() {
           ${canReceive ? `<button class="btn ghost" style="padding:5px 12px;font-size:11.5px;margin-left:6px;color:var(--jade);border-color:rgba(60,228,164,.4)" onclick="markReceived('${esc(s.id)}')">Mark received</button>` : ''}
           ${canPrint ? `<button class="btn ghost" style="padding:5px 12px;font-size:11.5px;margin-left:6px" onclick="printInvoice('${esc(s.id)}')">Invoice</button>` : ''}
         </td></tr>`;
-    }).join('');
+    }).join('') + (rows.length > shown.length ? `<tr><td colspan="13" class="hint">Showing the latest ${shown.length} of ${rows.length} matching bookings (the totals above count all ${rows.length}). Narrow the filters to see older ones.</td></tr>` : '');
 }
 
 ['bkFrom','bkTo','bkProjectFilter','bkStatusFilter','bkPaymentFilter'].forEach(id => {
@@ -1997,7 +2024,7 @@ async function applyBookingStatus_(bookingId, status) {
   if (CONFIG.API_URL) {
     const r = await apiPost({ action:'updateSaleStatus', bookingId, status });
     if (r.error) throw new Error(r.error);
-    const d = await apiGet('data'); if (!d.error) DB = d;
+    /* the save reply already carried the refreshed table */
   } else {
     const row = DB.sales.find(x => String(x['Booking ID']||'').trim() === String(bookingId).trim());
     if (row) row['Status'] = status;
@@ -2034,7 +2061,7 @@ async function raiseBill(bookingId) {
       const r = await apiPost({ action:'raiseInvoice', bookingId, amount });
       if (r.error) throw new Error(r.error);
       invoiceNo = r.invoiceNo || '';
-      const d = await apiGet('data'); if (!d.error) DB = d;
+      /* the save reply already carried the refreshed table */
     } else {
       const row = DB.sales.find(x => String(x['Booking ID']||'').trim() === String(bookingId).trim());
       if (row) { row['Bill Status']='Invoiced'; row['Invoice No']='INV-DEMO'; row['Invoice Date']=ymdLocal(new Date()); row['Invoice Amount']=amount; }
@@ -2051,7 +2078,7 @@ async function markReceived(bookingId) {
     if (CONFIG.API_URL) {
       const r = await apiPost({ action:'markCommissionReceived', bookingId });
       if (r.error) throw new Error(r.error);
-      const d = await apiGet('data'); if (!d.error) DB = d;
+      /* the save reply already carried the refreshed table */
     } else {
       const row = DB.sales.find(x => String(x['Booking ID']||'').trim() === String(bookingId).trim());
       if (row) { row['Bill Status']='Received'; row['Commission Received Date']=ymdLocal(new Date()); }
@@ -2212,7 +2239,7 @@ async function saveBudget(category, inputId, scope, type) {
         ? { action:'setBudget', category, scope, budgetType:'total', totalBudget: v }
         : { action:'setBudget', category, scope, monthlyBudget: v });
       if (r.error) throw new Error(r.error);
-      const d = await apiGet('data'); if (!d.error) DB = d;
+      /* the save reply already carried the refreshed table */
     } else {
       DB.budgets = DB.budgets || [];
       const row = DB.budgets.find(b => nkey(b['Category']||'') === nkey(category) && nkey(b['Scope']||'ALL') === nkey(scope));
@@ -2228,7 +2255,7 @@ async function saveRule(rule, inputId) {
     if (CONFIG.API_URL) {
       const r = await apiPost({ action:'setRule', rule, value: v });
       if (r.error) throw new Error(r.error);
-      const d = await apiGet('data'); if (!d.error) DB = d;
+      /* the save reply already carried the refreshed table */
     } else {
       DB.rules = DB.rules || [];
       const row = DB.rules.find(x => nkey(x['Rule']||'') === nkey(rule));
@@ -2244,7 +2271,7 @@ async function togglePhase(name, current) {
     if (CONFIG.API_URL) {
       const r = await apiPost({ action:'setProjectPhase', name, phase });
       if (r.error) throw new Error(r.error);
-      const d = await apiGet('data'); if (!d.error) DB = d;
+      /* the save reply already carried the refreshed table */
     } else {
       const row = DB.projects.find(p => nrm(p['Project Name']||p['Project']||'') === nrm(name));
       if (row) row['Phase'] = phase;
@@ -2807,7 +2834,7 @@ async function editArea(name, currentArea) {
     if (CONFIG.API_URL) {
       const r = await apiPost({ action:'setProjectArea', name, area });
       if (r.error) throw new Error(r.error);
-      const d = await apiGet('data'); if (!d.error) DB = d;
+      /* the save reply already carried the refreshed table */
     } else {
       const row = DB.projects.find(p => nrm(p['Project Name']||p['Project']||'') === nrm(name));
       if (row) row['Total Area (Sqft)'] = area;
@@ -2825,7 +2852,7 @@ async function editStatus(name, current) {
     if (CONFIG.API_URL) {
       const r = await apiPost({ action:'setProjectStatus', name, status: next });
       if (r.error) throw new Error(r.error);
-      const d = await apiGet('data'); if (!d.error) DB = d;
+      /* the save reply already carried the refreshed table */
     } else {
       const row = DB.projects.find(p => nrm(p['Project Name']||p['Project']||'') === nrm(name));
       if (row) row['Status'] = next;
@@ -2844,7 +2871,7 @@ async function editCommission(name, currentPct) {
     if (CONFIG.API_URL) {
       const r = await apiPost({ action:'setProjectCommission', name, commissionPct: pct });
       if (r.error) throw new Error(r.error);
-      const d = await apiGet('data'); if (!d.error) DB = d;
+      /* the save reply already carried the refreshed table */
     } else {
       const row = DB.projects.find(p => nrm(p['Project Name']||p['Project']||'') === nrm(name));
       if (row) row['Commission %'] = pct;
@@ -2863,7 +2890,7 @@ async function submit(btn, payload, localApply) {
       const r = await apiPost(payload);
       if (r.error) throw new Error(r.error);
       toast('Saved · ' + (r.id || 'ok'));
-      const d = await apiGet('data'); if (!d.error) DB = d;
+      /* the save reply already carried the refreshed table */
     }
     initFilters(); renderAll();
   } catch (e) { toast('Failed: ' + e.message); }
@@ -3002,40 +3029,51 @@ function expRows_() {
 /* Finds pairs of entries that look like the same bill logged twice (same rules as the server). */
 function findExpenseDuplicates(rows) {
   const pairs = new Map();
-  const sameAmt = (x, y) => Math.abs(x.amount - y.amount) < 0.5;
   const put = (a, b, level, why) => {
-    const k = a.idx + '|' + b.idx, cur = pairs.get(k);
-    if (!cur || (level === 'high' && cur.level !== 'high')) pairs.set(k, { a, b, level, why });
+    const k = a.r.idx + '|' + b.r.idx, cur = pairs.get(k);
+    if (!cur || (level === 'high' && cur.level !== 'high')) pairs.set(k, { a: a.r, b: b.r, level, why });
   };
-  // same bill number (any dates)
-  const withBill = rows.filter(r => r.billNo);
-  for (let i = 0; i < withBill.length; i++) {
-    for (let j = i + 1; j < withBill.length; j++) {
-      const a = withBill[i], b = withBill[j];
-      if (nkey(a.billNo) !== nkey(b.billNo)) continue;
-      if (a.vendor && b.vendor && nkey(a.vendor) !== nkey(b.vendor)) continue;
+  // normalise every text field ONCE (not inside the comparison loops)
+  const K = rows.map(r => ({ r, bill: nkey(r.billNo), vendor: nkey(r.vendor), scope: nkey(r.scope), cat: nkey(r.category), t: r.date.getTime(), amt: r.amount }));
+  const sameAmt = (x, y) => Math.abs(x.amt - y.amt) < 0.5;
+  // same bill number (any dates): group by number, compare only inside a group
+  const byBill = new Map();
+  K.forEach(k => { if (k.bill) { const g = byBill.get(k.bill); if (g) g.push(k); else byBill.set(k.bill, [k]); } });
+  byBill.forEach(g => {
+    for (let i = 0; i < g.length; i++) for (let j = i + 1; j < g.length; j++) {
+      const a = g[i], b = g[j];
+      if (a.vendor && b.vendor && a.vendor !== b.vendor) continue;
       put(a, b, 'high', sameAmt(a, b) ? 'Same bill no. and amount' : 'Same bill no. but different amount — possible altered bill');
     }
-  }
-  // close in time, same amount
-  const sorted = rows.slice().sort((x, y) => x.date - y.date);
-  const reach = Math.max(EXPG.nearDays, EXPG.vendorDays);
-  for (let i = 0; i < sorted.length; i++) {
-    for (let j = i + 1; j < sorted.length; j++) {
-      const a = sorted[i], b = sorted[j];
-      const gap = Math.round((b.date - a.date) / 86400000);
-      if (gap > reach) break;
+  });
+  // close in time, same amount: sorted by date, stop looking once entries are too far apart
+  K.sort((x, y) => x.t - y.t);
+  const reach = Math.max(EXPG.nearDays, EXPG.vendorDays) * 86400000 + 43200000;
+  for (let i = 0; i < K.length; i++) {
+    const a = K[i];
+    for (let j = i + 1; j < K.length; j++) {
+      const b = K[j];
+      if (b.t - a.t > reach) break;
       if (!sameAmt(a, b)) continue;
-      if (gap === 0 && nkey(a.scope) === nkey(b.scope) && nkey(a.category) === nkey(b.category))
-        put(a, b, 'high', 'Same date, project, category and amount');
-      else if (nkey(a.category) === nkey(b.category) && gap <= EXPG.nearDays)
-        put(a, b, 'medium', 'Same category and amount, ' + gap + ' day(s) apart');
-      else if (a.vendor && nkey(a.vendor) === nkey(b.vendor) && gap <= EXPG.vendorDays)
-        put(a, b, 'medium', 'Same vendor and amount, ' + gap + ' day(s) apart');
+      const gap = Math.round((b.t - a.t) / 86400000);
+      if (gap === 0 && a.scope === b.scope && a.cat === b.cat) put(a, b, 'high', 'Same date, project, category and amount');
+      else if (a.cat === b.cat && gap <= EXPG.nearDays) put(a, b, 'medium', 'Same category and amount, ' + gap + ' day(s) apart');
+      else if (a.vendor && a.vendor === b.vendor && gap <= EXPG.vendorDays) put(a, b, 'medium', 'Same vendor and amount, ' + gap + ' day(s) apart');
     }
   }
   return [...pairs.values()].sort((p, q) =>
     (p.level === q.level ? 0 : p.level === 'high' ? -1 : 1) || (q.b.date - p.b.date));
+}
+
+/* The scan is worked out once per data load, not on every keystroke in the search box. */
+let EXP_MEMO = { ref: null, n: -1, rows: null, pairs: null };
+function expScan_() {
+  const ref = DB.expenses, n = (ref || []).length;
+  if (EXP_MEMO.ref !== ref || EXP_MEMO.n !== n || !EXP_MEMO.rows) {
+    const rows = expRows_();
+    EXP_MEMO = { ref, n, rows, pairs: findExpenseDuplicates(rows) };
+  }
+  return EXP_MEMO;
 }
 
 function expEntryCell_(e) {
@@ -3051,8 +3089,7 @@ function expDeleteBtn_(e) {
 function renderExpenseList() {
   const tbl = $('tblExpenses');
   if (!tbl) return;
-  const rows = expRows_();
-  const pairs = findExpenseDuplicates(rows);
+  const scan = expScan_(), rows = scan.rows, pairs = scan.pairs;
   const dupIdx = new Set();
   pairs.forEach(p => { dupIdx.add(p.a.idx); dupIdx.add(p.b.idx); });
   const flagged = rows.filter(r => r.flags);
@@ -3113,7 +3150,7 @@ async function deleteExpense(id) {
     if (CONFIG.API_URL) {
       const r = await apiPost({ action: 'deleteExpense', expenseId: id, reason: reason.trim() });
       if (r.error) throw new Error(r.error);
-      const d = await apiGet('data'); if (!d.error) DB = d;
+      /* the save reply already carried the refreshed table */
     } else {
       DB.expenses = (DB.expenses || []).filter(x => String(x['Expense ID'] || '').trim() !== String(id));
     }
@@ -3149,7 +3186,7 @@ $('saveExpense').onclick = async function() {
         if (r.error) throw new Error(r.error);
       }
       msg = 'Saved · ' + r.id + ((r.flags || []).length ? ' · ⚑ ' + r.flags.length + ' flag(s) — see list below' : '');
-      const d = await apiGet('data'); if (!d.error) DB = d;
+      /* the save reply already carried the refreshed table */
     }
     ['eAmount', 'eDesc', 'eVendor', 'eBillNo'].forEach(id => $(id).value = '');   // clear so a re-click can't resubmit
     toast(msg);
@@ -3157,7 +3194,8 @@ $('saveExpense').onclick = async function() {
   } catch (err) { toast('Failed: ' + err.message); }
   btn.disabled = false;
 };
-if ($('expSearch')) $('expSearch').addEventListener('input', renderExpenseList);
+let expSearchTimer = null;   // wait for a short pause in typing before re-filtering thousands of rows
+if ($('expSearch')) $('expSearch').addEventListener('input', () => { clearTimeout(expSearchTimer); expSearchTimer = setTimeout(renderExpenseList, 250); });
 if ($('expFilter')) $('expFilter').addEventListener('change', renderExpenseList);
 
 /* ════════════════ LOGIN / PASSWORD / LOGOUT WIRING ════════════════ */
