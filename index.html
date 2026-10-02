@@ -506,6 +506,11 @@ body.role-viewer .wr{display:none!important}
 
     <!-- ═══ TARGETS ═══ -->
     <section class="view" id="view-targets">
+      <div class="formfoot adm" style="margin:0 0 16px">
+        <button class="btn ghost" id="tgGoRevise">✎ Revise targets</button>
+        <button class="btn ghost" id="tgGoAdd">＋ Add a project</button>
+        <span class="hint">Targets are set per financial year and for the whole life of each project — both for sales value and for Realtech's own earning.</span>
+      </div>
       <div class="grid kpis" id="tgtCards"></div>
       <div class="grid two section">
         <div class="card">
@@ -521,6 +526,45 @@ body.role-viewer .wr{display:none!important}
         <h3>Target vs achievement — detail</h3>
         <div style="overflow-x:auto"><table id="tblTarget"></table></div>
         <p class="hint" style="margin-top:10px">"Expected by now" prorates the FY target by time elapsed. Ahead/behind is measured against that pace line, not the year-end number — so a project can be at 40% of target in August and still be perfectly on track.</p>
+      </div>
+
+      <div class="grid kpis section" id="tgtFeeCards"></div>
+      <div class="card section">
+        <h3>Realtech earning (mandate fee) — this year's target vs earned</h3>
+        <div style="overflow-x:auto"><table id="tblTargetFee"></table></div>
+        <p class="hint" style="margin-top:10px">Realtech earns a commission (the mandate fee) on every booking, so the earning target is what really counts for the business. If you haven't typed an earning target for a project, it is worked out as <b>sales-value target × commission %</b> (marked <i>auto</i>); a number you type yourself is marked <i>set</i>. Earned = agreement value × the project's commission rate on bookings in this financial year.</p>
+      </div>
+
+      <div class="grid kpis section" id="tgtLifeCards"></div>
+      <div class="card section">
+        <h3>Whole project life — target vs achieved to date</h3>
+        <div style="overflow-x:auto"><table id="tblTargetLife"></table></div>
+        <p class="hint" style="margin-top:10px">Counts every booking since the project started (the year filter at the top does not apply). <b>Units sold</b> = number of bookings against the project's total units. <b>At this pace</b> divides what is still left by the average sales value per month so far — a rough guide, not a promise.</p>
+      </div>
+
+      <div class="card section adm" id="tgEditor">
+        <h3>Revise targets</h3>
+        <div class="formgrid">
+          <div class="field"><label>Project</label><select id="tgProject"></select></div>
+          <div class="field"><label>Financial year</label><select id="tgFY"></select></div>
+        </div>
+        <p class="hint" id="tgNote" style="margin:12px 0 4px"></p>
+        <h3 style="margin-top:18px">For this financial year</h3>
+        <div class="formgrid">
+          <div class="field"><label>Sales-value target (₹ Cr)</label><input type="number" id="tgRev" step="0.5" min="0"></div>
+          <div class="field"><label>Bookings target</label><input type="number" id="tgBk" step="1" min="0"></div>
+          <div class="field"><label>Realtech earning target (₹ Cr) — optional</label><input type="number" id="tgFee" step="0.01" min="0"></div>
+        </div>
+        <h3 style="margin-top:22px">For the whole life of the project</h3>
+        <div class="formgrid">
+          <div class="field"><label>Sales-value target (₹ Cr)</label><input type="number" id="tgLRev" step="0.5" min="0"></div>
+          <div class="field"><label>Bookings target</label><input type="number" id="tgLBk" step="1" min="0"></div>
+          <div class="field"><label>Realtech earning target (₹ Cr) — optional</label><input type="number" id="tgLFee" step="0.01" min="0"></div>
+        </div>
+        <div class="formfoot">
+          <button class="btn" id="saveTargets">Save targets</button>
+          <span class="hint"><b>Sales value</b> = total agreement value of the bookings. <b>Earning</b> = the commission Realtech earns on them; leave it empty and it is worked out from the commission %. Setting a year's sales-value target to <b>0</b> takes that project out of this year's pace checks (handy for projects that launch later). Empty all three boxes of a year and save to go back to the project's default yearly target.</span>
+        </div>
       </div>
     </section>
 
@@ -696,7 +740,12 @@ body.role-viewer .wr{display:none!important}
           <div class="field"><label>FY target revenue (₹ Cr)</label><input type="number" id="pTargetRev" step="0.5"></div>
           <div class="field"><label>FY target bookings</label><input type="number" id="pTargetBk"></div>
           <div class="field"><label>Commission % (Realtech fee)</label><input type="number" id="pCommission" step="0.1" value="5" placeholder="5"></div>
+          <div class="field"><label>Whole-life sales-value target (₹ Cr)</label><input type="number" id="pLifeRev" step="0.5"></div>
+          <div class="field"><label>Whole-life bookings target</label><input type="number" id="pLifeBk"></div>
+          <div class="field"><label>Yearly earning target (₹ Cr) — optional</label><input type="number" id="pFyFee" step="0.01"></div>
+          <div class="field"><label>Whole-life earning target (₹ Cr) — optional</label><input type="number" id="pLifeFee" step="0.01"></div>
         </div>
+        <p class="hint" style="margin-top:10px">The yearly targets typed here are the <b>default for every financial year</b>. To set a different target for one particular year (or change any target later), use <b>Targets → Revise targets</b>. Earning targets left empty are worked out as sales value × commission %.</p>
         <p class="hint" style="margin-top:10px">Status decides whether this site shares central marketing/CP-sourcing cost — only <b>Active</b> sites do, split by Total area. Mark a site Upcoming before launch and Completed once it's sold out, and it'll stop drawing an allocation.</p>
         <div class="formfoot"><button class="btn" id="saveProject">Add project</button></div>
       </div>
@@ -977,6 +1026,10 @@ function PJ() {
       targetRevCr: toNum(pick(m, 'fy target revenue (cr)', 'fy target revenue', 'target revenue', 'target revenue cr', 'target (cr)')),
       targetBk: toNum(pick(m, 'fy target bookings', 'target bookings', 'booking target')),
       commission: toNum(pick(m, 'commission %', 'commission', 'commission pct', 'fee %')),
+      lifeRevCr: toNum(pick(m, 'lifetime target revenue (cr)', 'lifetime target revenue')),
+      lifeBk: toNum(pick(m, 'lifetime target bookings')),
+      lifeFeeCr: toNum(pick(m, 'lifetime target fee (cr)', 'lifetime target fee')),
+      fyFeeCr: toNum(pick(m, 'fy target fee (cr)', 'fy target fee')),
       phase: /token/i.test(String(pick(m, 'phase', 'stage') || '')) ? 'Token Phase' : 'Launched'
     };
   }).filter(p => p.name);
@@ -1313,6 +1366,49 @@ function inRange(d) {
   return true;
 }
 
+/* ════════════════ TARGETS: per financial year + whole project life ════════════════
+   A project has a DEFAULT yearly target (columns on the Projects sheet). For any one financial year an
+   admin can set a specific target (Targets sheet) — that wins over the default. Each target comes as
+   sales value (₹ Cr), bookings, and Realtech's own earning (mandate fee, ₹ Cr). An earning target left
+   empty means "sales value × commission %". The whole-life targets sit on the project itself. */
+function normTargets() {
+  const idx = {};
+  (DB.targets || []).forEach(r => {
+    const m = keymap(r);
+    const proj = String(pick(m, 'project', 'project name') || '').trim();
+    const yr = parseInt((String(pick(m, 'fy start year', 'fy', 'financial year') ?? '').match(/\d{4}/) || [])[0], 10);
+    if (!proj || !(yr > 1999)) return;
+    const o = v => (v === undefined || v === '' || v === null) ? null : toNum(v);   // blank = "not set", 0 = a real zero
+    idx[nkey(proj) + '|' + yr] = { revCr: o(pick(m, 'revenue target (cr)', 'revenue target')), bk: o(pick(m, 'bookings target', 'target bookings')), feeCr: o(pick(m, 'fee target (cr)', 'fee target')) };
+  });
+  return idx;
+}
+function targetFor(p, fy, idx) {
+  const row = (idx || normTargets())[nkey(p.name) + '|' + fy];
+  return {
+    revCr: row && row.revCr != null ? row.revCr : p.targetRevCr,
+    bk:    row && row.bk    != null ? row.bk    : p.targetBk,
+    feeCr: row && row.feeCr != null ? row.feeCr : (p.fyFeeCr || 0),
+    set: !!row
+  };
+}
+/* Everything achieved since each project started (all periods; cancelled and token rows excluded). */
+function lifetimeStats(salesRows) {
+  const now = new Date();
+  const all = (salesRows || normSales()).filter(s => s.status !== 'Cancelled' && s.status !== 'Token');
+  return PJ().map(p => {
+    const mine = all.filter(s => nrm(s.project) === nrm(p.name));
+    const gdv = mine.reduce((a, s) => a + s.value, 0), fee = mine.reduce((a, s) => a + s.fee, 0);
+    const first = mine.length ? new Date(Math.min.apply(null, mine.map(s => s.date))) : null;
+    const monthsLive = first ? Math.max(1, (now - first) / (86400000 * 30.44)) : 0;
+    const tG = p.lifeRevCr * 1e7, tFeeAuto = tG * rateOf(p.name);
+    const tF = p.lifeFeeCr > 0 ? p.lifeFeeCr * 1e7 : tFeeAuto;
+    const avgMo = monthsLive ? gdv / monthsLive : 0, remaining = Math.max(0, tG - gdv);
+    return { name: p.name, units: p.units, bk: mine.length, gdv, fee, tG, tF, feeSet: p.lifeFeeCr > 0, tBk: p.lifeBk, monthsLive, avgMo, remaining,
+      monthsToGo: tG > 0 && remaining > 0 && avgMo > 0 ? remaining / avgMo : null };
+  });
+}
+
 /* ════════════════ ANALYTICS ENGINE ════════════════ */
 const MONTHS_CAL = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 function analyse() {
@@ -1444,16 +1540,20 @@ function analyse() {
   const fySales = allSales.filter(s => fyOf(s.date)===pfy && s.status!=='Cancelled' && s.status!=='Token');
   const fyStart = new Date(pfy,3,1), fyEnd = new Date(pfy+1,2,31);
   const elapsed = Math.min(1, Math.max(0.04,(Math.min(now,fyEnd)-fyStart)/(fyEnd-fyStart)));
+  const tIdx = normTargets();
   const pacing = PJ().map(p => {
     const name = p.name;
     const mine = fySales.filter(s=>nrm(s.project)===nrm(name));
     const rev = mine.reduce((a,s)=>a+s.value,0);
     const pFee = mine.reduce((a,s)=>a+s.fee,0);
     const bk = mine.length;
-    const tR = p.targetRevCr*1e7;
-    const tB = p.targetBk;
+    const T = targetFor(p, pfy, tIdx);           // this year's own target if set, else the project's default
+    const tR = T.revCr*1e7;
+    const tB = T.bk;
+    const tFeeAuto = tR * rateOf(name);
     return { name, rev, fee:pFee, bk, tR, tB, phase: p.phase,
-      tFee: tR * rateOf(name),                 // fee-equivalent target
+      tFee: T.feeCr > 0 ? T.feeCr*1e7 : tFeeAuto,   // earning target: typed value, else sales target × commission
+      tFeeAuto, feeSet: T.feeCr > 0, fySet: T.set,
       pace: tR>0 ? (rev/tR)/elapsed : null,
       achievedPct: tR>0 ? rev/tR : null };
   });
@@ -2355,6 +2455,7 @@ function renderTargets(A) {
         <td class="r num">${p.bk}</td><td class="r num">${p.tB||'–'}</td>
         <td class="r num">${need!=null?fmt(need):'–'}</td><td class="r">${verdict}</td></tr>`;
     }).join('');
+  renderTargetsExtra(A);
 }
 
 /* ════════════════ SIMULATOR ════════════════ */
@@ -2813,7 +2914,7 @@ function renderInsights(A) {
 }
 
 function renderProjects() {
-  $('tblProjects').innerHTML = `<tr><th>ID</th><th>Name</th><th>Location</th><th class="r">Units</th><th class="r">Area (tap to edit)</th><th class="r">FY target (Cr)</th><th class="r">Target bookings</th><th class="r">Commission (tap to edit)</th><th>Status (tap to edit)</th><th>Phase (tap to toggle)</th></tr>` +
+  $('tblProjects').innerHTML = `<tr><th>ID</th><th>Name</th><th>Location</th><th class="r">Units</th><th class="r">Area (tap to edit)</th><th class="r">Default FY target (Cr)</th><th class="r">Default FY bookings</th><th class="r">Commission (tap to edit)</th><th>Status (tap to edit)</th><th>Phase (tap to toggle)</th></tr>` +
     PJ().map(p=>`<tr><td class="num">${esc(p.id)}</td><td>${esc(p.name)}</td><td>${esc(p.location)}</td>
       <td class="r num">${esc(p.units)}</td>
       <td class="r"><button class="btn ghost" style="padding:5px 12px;font-size:11.5px" onclick="editArea('${esc(p.name)}', ${p.area||0})">${p.area ? esc(p.area) : 'set area'} ✎</button></td>
@@ -2919,10 +3020,12 @@ $('saveProject').onclick = function() {
   const p = { action:'addProject', name:$('pName').value, location:$('pLoc').value,
     totalUnits:$('pUnits').value, totalArea:$('pArea').value, status:$('pStatus').value,
     targetRevenueCr:$('pTargetRev').value, targetBookings:$('pTargetBk').value,
+    lifeRevenueCr:$('pLifeRev').value, lifeBookings:$('pLifeBk').value, fyFeeCr:$('pFyFee').value, lifeFeeCr:$('pLifeFee').value,
     commissionPct: $('pCommission').value || (/aikyam/i.test($('pName').value) ? 4.75 : 5) };
   if (!p.name) return toast('Project name is required');
   submit(this, p, () => DB.projects.push({ 'Project ID':'PRJ-DEMO','Project Name':p.name,'Location':p.location,'Total Units':p.totalUnits,
-    'Total Area (Sqft)':p.totalArea,'Status':p.status,'FY Target Revenue (Cr)':p.targetRevenueCr,'FY Target Bookings':p.targetBookings,'Commission %':p.commissionPct }));
+    'Total Area (Sqft)':p.totalArea,'Status':p.status,'FY Target Revenue (Cr)':p.targetRevenueCr,'FY Target Bookings':p.targetBookings,'Commission %':p.commissionPct,
+    'Lifetime Target Revenue (Cr)':p.lifeRevenueCr,'Lifetime Target Bookings':p.lifeBookings,'Lifetime Target Fee (Cr)':p.lifeFeeCr,'FY Target Fee (Cr)':p.fyFeeCr }));
 };
 
 let editingEmployee = null;   // { id, originalName } while editing; null when adding new
@@ -3218,6 +3321,159 @@ $('pwSave').onclick = async () => {
   } catch (e) { if (!e.auth) $('pwMsg').textContent = 'Failed: ' + e.message; }
   $('pwSave').disabled = false;
 };
+
+/* ── earning (mandate fee) + whole-life tables, and the Revise form ── */
+const TG = { filled: false };
+function tgCards_(id, cards) {
+  $(id).innerHTML = cards.map(([l,,,d,,,cls]) =>
+    `<div class="card kpi"><div class="lbl">${l}</div><div class="val num">–</div><div class="delta ${cls||'flat'}">${d}</div></div>`).join('');
+  document.querySelectorAll('#' + id + ' .val').forEach((el, i) => countUp(el, cards[i][1], cards[i][2]));
+}
+const tgVerdict_ = (paceVal, phase) => phase === 'Token Phase' ? '<span class="pill" style="background:rgba(91,227,255,.12);color:var(--cyan);border:1px solid rgba(91,227,255,.3)">token phase</span>'
+  : paceVal == null ? '<span class="pill warn">no target</span>'
+  : paceVal >= 0.95 ? '<span class="pill good">on track</span>'
+  : paceVal >= 0.7 ? '<span class="pill warn">watch</span>' : '<span class="pill risk">behind</span>';
+const tgEditBtn_ = name => `<button class="btn ghost" style="padding:5px 11px;font-size:11.5px" title="Revise this project's targets" onclick="editTargetsFor('${esc(name)}')">✎</button>`;
+
+function renderTargetsExtra(A) {
+  const pfy = F.fy === 'all' ? fyOf(new Date()) : F.fy;
+
+  // ── Realtech earning, this financial year ──
+  const tF = A.pacing.reduce((a,p)=>a+p.tFee,0), eF = A.pacing.reduce((a,p)=>a+p.fee,0), expF = tF * A.elapsed;
+  tgCards_('tgtFeeCards', [
+    ['Earning target (' + fyLabel(pfy) + ')', tF, fmt, A.pacing.filter(p=>p.tFee>0).length + ' projects · Realtech fee', null, '#F0BC52'],
+    ['Earned so far', eF, fmt, tF ? pct(eF/tF) + ' of earning target' : '—', null, '#3CE4A4'],
+    ['Expected by now', expF, fmt, pct(A.elapsed)+' of year elapsed', null, '#5BE3FF'],
+    ['Earning pace vs time', tF ? eF/expF : null, v=>v==null||!isFinite(v)?'–':pct(v), eF>=expF?'ahead of the clock':'behind the clock', null, eF>=expF?'#3CE4A4':'#FF6F62', eF>=expF?'up':'down'],
+    ['Earning gap to date', eF-expF, fmt, eF>=expF?'surplus over pace line':'shortfall vs pace line', null, '#A18BFF', eF>=expF?'up':'down']
+  ]);
+  const feeRow = p => {
+    const exp = p.tFee * A.elapsed, gap = p.fee - exp, pace = p.tFee > 0 ? (p.fee / p.tFee) / A.elapsed : null;
+    const src = p.tFee > 0 ? (p.feeSet ? 'set' : 'auto') : '';
+    return `<tr><td>${esc(p.name)}</td><td class="r num">${(rateOf(p.name)*100).toFixed(2)}%</td>
+      <td class="r num">${p.tFee ? fmt(p.tFee) : '–'}${src ? ` <span class="hint">${src}</span>` : ''}</td><td class="r num">${fmt(p.fee)}</td>
+      <td class="r num">${p.tFee > 0 ? pct(p.fee / p.tFee) : '–'}</td><td class="r num">${p.tFee > 0 ? fmt(exp) : '–'}</td>
+      <td class="r num" style="color:${gap>=0?'var(--jade)':'var(--ember)'}">${p.tFee > 0 ? fmt(gap) : '–'}</td>
+      <td class="r">${tgVerdict_(pace, p.phase)}</td><td class="r adm">${tgEditBtn_(p.name)}</td></tr>`;
+  };
+  $('tblTargetFee').innerHTML = `<tr><th>Project</th><th class="r">Commission</th><th class="r">Earning target</th><th class="r">Earned</th><th class="r">%</th><th class="r">Expected by now</th><th class="r">Gap vs pace</th><th class="r">Verdict</th><th class="r adm"></th></tr>`
+    + A.pacing.map(feeRow).join('')
+    + `<tr><td><b>Total</b></td><td></td><td class="r num"><b>${fmt(tF)}</b></td><td class="r num"><b>${fmt(eF)}</b></td><td class="r num"><b>${tF>0?pct(eF/tF):'–'}</b></td><td class="r num"><b>${fmt(expF)}</b></td>
+       <td class="r num" style="color:${eF>=expF?'var(--jade)':'var(--ember)'}"><b>${tF>0?fmt(eF-expF):'–'}</b></td><td></td><td class="adm"></td></tr>`;
+
+  // ── whole project life ──
+  const allSales = normSales();                 // read once, shared by the whole-life table and the form
+  const L = lifetimeStats(allSales);
+  const tG = L.reduce((a,x)=>a+x.tG,0), gG = L.reduce((a,x)=>a+x.gdv,0), tLF = L.reduce((a,x)=>a+x.tF,0), eLF = L.reduce((a,x)=>a+x.fee,0);
+  tgCards_('tgtLifeCards', [
+    ['Whole-life target (sales value)', tG, fmt, L.filter(x=>x.tG>0).length + ' of ' + L.length + ' projects have one', null, '#F0BC52'],
+    ['Achieved to date', gG, fmt, tG ? pct(gG/tG) + ' of whole-life target' : '—', null, '#3CE4A4'],
+    ['Whole-life earning target', tLF, fmt, 'Realtech fee over project life', null, '#5BE3FF'],
+    ['Earned to date', eLF, fmt, tLF ? pct(eLF/tLF) + ' of earning target' : '—', null, '#A18BFF']
+  ]);
+  const lifeRow = x => {
+    const done = x.tG > 0 && x.remaining === 0;
+    const pace = x.tG <= 0 ? '–' : done ? '<span class="pill good">target reached</span>'
+      : x.monthsToGo == null ? '–' : (x.monthsToGo > 120 ? 'more than 10 years' : '~' + (x.monthsToGo < 10 ? x.monthsToGo.toFixed(1) : Math.round(x.monthsToGo)) + ' months');
+    return `<tr><td>${esc(x.name)}</td>
+      <td class="r num">${x.bk}${x.units > 0 ? ' / ' + x.units + ' <span class="hint">(' + pct(x.bk / x.units) + ')</span>' : ''}</td>
+      <td class="r num">${x.tG > 0 ? fmt(x.tG) : '–'}</td><td class="r num">${fmt(x.gdv)}</td><td class="r num">${x.tG > 0 ? pct(x.gdv / x.tG) : '–'}</td>
+      <td class="r num">${x.tG > 0 ? fmt(x.remaining) : '–'}</td><td class="r num">${x.monthsLive ? x.monthsLive.toFixed(1) : '–'}</td>
+      <td class="r num">${x.monthsLive ? fmt(x.avgMo) : '–'}</td><td class="r">${pace}</td>
+      <td class="r num">${x.tF > 0 ? fmt(x.tF) + ' <span class="hint">' + (x.feeSet ? 'set' : 'auto') + '</span>' : '–'}</td>
+      <td class="r num">${fmt(x.fee)}</td><td class="r num">${x.tF > 0 ? pct(x.fee / x.tF) : '–'}</td>
+      <td class="r num">${x.tBk > 0 ? x.bk + ' / ' + x.tBk : '–'}</td><td class="r adm">${tgEditBtn_(x.name)}</td></tr>`;
+  };
+  $('tblTargetLife').innerHTML = `<tr><th>Project</th><th class="r">Units sold / total</th><th class="r">Whole-life target</th><th class="r">Achieved to date</th><th class="r">%</th><th class="r">Remaining</th><th class="r">Months live</th><th class="r">Avg / month</th><th class="r">At this pace</th><th class="r">Earning target</th><th class="r">Earned to date</th><th class="r">%</th><th class="r">Bookings vs target</th><th class="r adm"></th></tr>`
+    + L.map(lifeRow).join('')
+    + `<tr><td><b>Total</b></td><td class="r num"><b>${L.reduce((a,x)=>a+x.bk,0)}${L.some(x=>x.units>0) ? ' / ' + L.reduce((a,x)=>a+x.units,0) : ''}</b></td><td class="r num"><b>${fmt(tG)}</b></td><td class="r num"><b>${fmt(gG)}</b></td><td class="r num"><b>${tG>0?pct(gG/tG):'–'}</b></td>
+       <td class="r num"><b>${tG>0?fmt(L.reduce((a,x)=>a+x.remaining,0)):'–'}</b></td><td></td><td></td><td></td><td class="r num"><b>${fmt(tLF)}</b></td><td class="r num"><b>${fmt(eLF)}</b></td><td class="r num"><b>${tLF>0?pct(eLF/tLF):'–'}</b></td><td></td><td class="adm"></td></tr>`;
+
+  renderTargetEditor(allSales);
+}
+
+/* ── Revise-targets form ── */
+function renderTargetEditor(salesRows) {
+  const pSel = $('tgProject'), fSel = $('tgFY');
+  if (!pSel || !fSel) return;
+  const names = PJ().map(p => p.name), keepP = pSel.value, keepF = fSel.value;
+  const now = fyOf(new Date()), fys = new Set([now - 1, now, now + 1]);
+  (salesRows || normSales()).forEach(s => fys.add(fyOf(s.date)));
+  Object.keys(normTargets()).forEach(k => fys.add(Number(k.split('|')[1])));
+  const list = [...fys].sort((a, b) => b - a);
+  const wantF = keepF ? Number(keepF) : (F.fy === 'all' ? now : F.fy);
+  pSel.innerHTML = names.map(n => `<option ${n === keepP ? 'selected' : ''}>${esc(n)}</option>`).join('');
+  fSel.innerHTML = list.map(y => `<option value="${y}" ${y === wantF ? 'selected' : ''}>${fyLabel(y)}</option>`).join('');
+  if (!TG.filled) { fillTargetForm(); TG.filled = true; }
+}
+function tgAutoFee_(revCr, name) { return revCr > 0 ? (revCr * rateOf(name)).toFixed(2) : ''; }
+function tgPlaceholders_() {
+  const name = $('tgProject').value;
+  $('tgFee').placeholder = $('tgRev').value !== '' ? 'auto: ' + tgAutoFee_(Number($('tgRev').value), name) + ' Cr' : 'auto = sales value × commission %';
+  $('tgLFee').placeholder = $('tgLRev').value !== '' ? 'auto: ' + tgAutoFee_(Number($('tgLRev').value), name) + ' Cr' : 'auto = sales value × commission %';
+}
+function fillTargetForm() {
+  const name = $('tgProject').value, fy = Number($('tgFY').value);
+  const p = PJ().find(x => x.name === name);
+  if (!p) return;
+  const idx = normTargets(), row = idx[nkey(name) + '|' + fy], T = targetFor(p, fy, idx);
+  $('tgRev').value = T.revCr || (row && row.revCr === 0 ? 0 : '');
+  $('tgBk').value = T.bk || (row && row.bk === 0 ? 0 : '');
+  $('tgFee').value = row && row.feeCr != null ? row.feeCr : (p.fyFeeCr || '');
+  $('tgLRev').value = p.lifeRevCr || ''; $('tgLBk').value = p.lifeBk || ''; $('tgLFee').value = p.lifeFeeCr || '';
+  $('tgNote').textContent = row
+    ? fyLabel(fy) + ' targets for ' + name + ' were set specifically for this year.'
+    : fyLabel(fy) + ': no special target for ' + name + ' yet — it is using the default yearly target from the Projects sheet. Saving will set one for this year.';
+  tgPlaceholders_();
+}
+function editTargetsFor(name) {
+  $('tgProject').value = name; fillTargetForm();
+  $('tgEditor').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+async function saveTargets() {
+  const btn = $('saveTargets');
+  const project = $('tgProject').value, fy = Number($('tgFY').value);
+  const val = id => $(id).value.trim();
+  const p = { action: 'setTargets', project, fy, revenueCr: val('tgRev'), bookings: val('tgBk'), feeCr: val('tgFee'),
+              lifeRevenueCr: val('tgLRev'), lifeBookings: val('tgLBk'), lifeFeeCr: val('tgLFee') };
+  if (!project) return toast('Choose a project');
+  for (const k of ['revenueCr','bookings','feeCr','lifeRevenueCr','lifeBookings','lifeFeeCr']) {
+    if (p[k] !== '' && !(Number(p[k]) >= 0)) return toast('Targets must be numbers, zero or more');
+  }
+  btn.disabled = true;
+  try {
+    if (!CONFIG.API_URL) {
+      // demo session only: apply the same change locally
+      const pr = (DB.projects || []).find(r => nrm(r['Project Name'] || r['Project'] || '') === nrm(project));
+      if (!pr) throw new Error('Project not found');
+      pr['Lifetime Target Revenue (Cr)'] = p.lifeRevenueCr; pr['Lifetime Target Bookings'] = p.lifeBookings; pr['Lifetime Target Fee (Cr)'] = p.lifeFeeCr;
+      DB.targets = (DB.targets || []).filter(r => !(nrm(r['Project']) === nrm(project) && parseInt(r['FY Start Year'], 10) === fy));
+      if (p.revenueCr !== '' || p.bookings !== '' || p.feeCr !== '') {
+        const row = { 'Project': project, 'FY Start Year': fy, 'FY': 'FY ' + fy + '-' + String(fy + 1).slice(2) };
+        if (p.revenueCr !== '') row['Revenue Target (Cr)'] = Number(p.revenueCr);
+        if (p.bookings !== '') row['Bookings Target'] = Number(p.bookings);
+        if (p.feeCr !== '') row['Fee Target (Cr)'] = Number(p.feeCr);
+        DB.targets.push(row);
+      }
+      toast('Targets saved to demo session (set API_URL to persist)');
+    } else {
+      const r = await apiPost(p);            // the reply carries the refreshed projects + targets tables
+      if (r.error) throw new Error(r.error);
+      toast(r.reset ? 'Back to the default yearly target for ' + fyLabel(fy) : 'Targets saved · ' + project + ' · ' + fyLabel(fy));
+    }
+    TG.filled = false;
+    renderAll();
+  } catch (e) { toast('Failed: ' + e.message); }
+  btn.disabled = false;
+}
+if ($('saveTargets')) {
+  $('saveTargets').onclick = saveTargets;
+  $('tgProject').addEventListener('change', fillTargetForm);
+  $('tgFY').addEventListener('change', fillTargetForm);
+  ['tgRev', 'tgLRev'].forEach(id => $(id).addEventListener('input', tgPlaceholders_));
+  $('tgGoRevise').onclick = () => $('tgEditor').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  $('tgGoAdd').onclick = () => document.querySelector('.navbtn[data-view="projects"]').click();
+}
 
 /* ════════════════ NAV & FILTERS ════════════════ */
 document.querySelectorAll('.navbtn').forEach(b => b.onclick = () => {
