@@ -231,6 +231,24 @@ td.r,th.r{text-align:right}
 body:not(.role-admin) .adm{display:none!important}
 body.role-viewer .wr{display:none!important}
 
+/* ═══ click-through: tap a number to see the data behind it ═══ */
+[data-drill]{cursor:pointer}
+.kpi[data-drill]::after{content:'↗';position:absolute;top:14px;right:16px;font-size:13px;color:var(--brass);opacity:.4;transition:.18s}
+.kpi[data-drill]:hover::after{opacity:1}
+.chip[data-drill]:hover,.paytile[data-drill]:hover{border-color:rgba(240,188,82,.5);background:rgba(240,188,82,.07)}
+.paystrip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:16px}
+.paytile{border:1px solid var(--line);border-radius:14px;padding:12px 14px;background:rgba(255,255,255,.025);transition:.18s}
+.paytile .lbl{font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);font-family:'JetBrains Mono',monospace}
+.paytile .v{font-size:20px;font-weight:600;margin-top:6px;letter-spacing:-.01em}
+.paytile .s{font-size:10.5px;color:var(--faint);margin-top:4px;font-family:'JetBrains Mono',monospace}
+.paybar{grid-column:1/-1;height:6px;background:rgba(6,10,20,.75);border:1px solid var(--line);border-radius:5px;overflow:hidden}
+.paybar i{display:block;height:100%;border-radius:5px;background:var(--jade);box-shadow:0 0 10px var(--jade)}
+.drillcard{width:100%;max-width:1120px;max-height:90vh;overflow-y:auto;overflow-x:hidden;padding:24px 26px 28px}
+.drillhead{display:flex;gap:16px;align-items:flex-start;justify-content:space-between;margin-bottom:14px}
+.drillhead .eyebrow{font-size:10px;letter-spacing:.24em;text-transform:uppercase;color:var(--brass);font-family:'JetBrains Mono',monospace;margin-bottom:8px}
+.drillhead h2{font-size:26px;font-weight:700;letter-spacing:-.02em;margin-bottom:6px}
+.drillcard .chips{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 4px}
+
 #busy{position:fixed;top:12px;right:16px;z-index:95;display:none;align-items:center;gap:9px;padding:8px 14px;border-radius:999px;font-size:12px;color:var(--text);
   background:rgba(10,15,30,.94);border:1px solid rgba(240,188,82,.4);box-shadow:var(--glow-brass)}
 #busy.on{display:flex}
@@ -249,6 +267,9 @@ body.role-viewer .wr{display:none!important}
   .hero{grid-template-columns:1fr;gap:22px;padding:22px}
   .hero .dialside{grid-template-columns:1fr;justify-items:center}
   .two{grid-template-columns:1fr}
+  .paystrip{grid-template-columns:1fr}
+  .drillcard{padding:18px 16px 22px}
+  .drillhead h2{font-size:21px}
 }
 </style>
 </head>
@@ -278,6 +299,22 @@ body.role-viewer .wr{display:none!important}
     <div class="field"><label>New password again</label><input type="password" id="pwNew2" autocomplete="new-password"></div>
     <div class="msg" id="pwMsg"></div>
     <div class="row"><button class="btn" id="pwSave">Save</button><button class="btn ghost" id="pwCancel">Cancel</button></div>
+  </div>
+</div>
+
+<!-- ═══ SOURCE DATA (click-through) ═══ -->
+<div class="modalbg" id="drillModal">
+  <div class="card drillcard">
+    <div class="drillhead">
+      <div>
+        <div class="eyebrow" id="drillEyebrow"></div>
+        <h2 id="drillTitle"></h2>
+        <p class="hint" id="drillSub"></p>
+      </div>
+      <button class="btn ghost" id="drillClose" style="flex:none">Close ✕</button>
+    </div>
+    <div class="chips" id="drillChips"></div>
+    <div id="drillBody"></div>
   </div>
 </div>
 
@@ -323,6 +360,7 @@ body.role-viewer .wr{display:none!important}
           <div class="eyebrow" id="heroPeriod">Revenue</div>
           <div class="big num" id="heroFee">–</div>
           <div class="chips" id="heroChips"></div>
+          <div class="paystrip" id="payStrip"></div>
         </div>
         <div class="dialside">
           <div class="dialwrap">
@@ -1483,15 +1521,20 @@ function analyse() {
   const bookings = perSales.length;
   const received = perSales.reduce((a,s)=>a+s.received,0);
   let expense = 0;
-  if (F.project === 'all') expense = exps.reduce((a,e)=>a+e.amount,0);
-  else {
+  const expDetail = [];   // the individual entries that add up to "expense" — shown when a number is clicked
+  if (F.project === 'all') {
+    expense = exps.reduce((a,e)=>a+e.amount,0);
+    exps.forEach(e => expDetail.push({ ...e, counted: e.amount }));
+  } else {
     const revByProj = {};
     active.forEach(s => revByProj[nrm(s.project)]=(revByProj[nrm(s.project)]||0)+s.fee);
     const totRev = Object.values(revByProj).reduce((a,b)=>a+b,0);
     exps.forEach(e => {
-      if (nrm(e.scope) === nrm(F.project)) expense += e.amount;
-      else if (nrm(e.scope) === 'central')
-        expense += e.amount * (totRev>0 ? (revByProj[nrm(F.project)]||0)/totRev : 1/Math.max(1,PJ().length||1));
+      if (nrm(e.scope) === nrm(F.project)) { expense += e.amount; expDetail.push({ ...e, counted: e.amount }); }
+      else if (nrm(e.scope) === 'central') {
+        const c = e.amount * (totRev>0 ? (revByProj[nrm(F.project)]||0)/totRev : 1/Math.max(1,PJ().length||1));
+        expense += c; expDetail.push({ ...e, counted: c });
+      }
     });
   }
 
@@ -1692,7 +1735,7 @@ function analyse() {
   const budTotal = budgetRows.reduce((a,r) => a + r.budget, 0);
   const budActual = budgetRows.reduce((a,r) => a + r.actual, 0);
 
-  return { sales:perSales, cancelled, revenue, fee, bookings, received, expense,
+  return { sales:perSales, cancelled, revenue, fee, bookings, received, expense, expDetail,
     bySource, overheads, sites, series, pacing, elapsed, fc, activeMonths,
     fyToDateFee, fcFyTotal, health, centralTotal, team, roster, pnl, mip,
     rules, tokensView, tokensAll: tokenRows, tokenFeePotential, accr, payables,
@@ -1983,6 +2026,7 @@ function buildInsights(A) {
 /* ════════════════ RENDER ════════════════ */
 function renderAll() {
   const A = analyse();
+  window.__A = A;   // the click-through panel reads the latest numbers from here
   renderKPIs(A); renderHealth(A); renderCharts(A);
   renderSourceTable(A); renderSiteTable(A); renderOverheads(A);
   renderPnl(A); renderTeam(A);
@@ -2705,13 +2749,21 @@ function renderKPIs(A) {
   countUp($('heroFee'), A.fee, fmt);
   const totalBk = normSales().filter(s => s.status !== 'Cancelled' && s.status !== 'Token').length;
   $('heroChips').innerHTML = [
-    `<span class="chip"><b>${fmt(A.revenue)}</b> sales value</span>`,
-    `<span class="chip"><b>${A.bookings}</b>${A.bookings !== totalBk ? ' of ' + totalBk : ''} bookings${A.bookings !== totalBk ? ' in view' : ''}</span>`,
-    `<span class="chip"><b>${fmt(A.expense)}</b> spend</span>`,
-    `<span class="chip ${net>=0?'pos':'neg'}"><b>${fmt(net)}</b> net</span>`,
-    `<span class="chip"><b>${fmt(A.received)}</b> collected</span>`
+    `<span class="chip" data-drill="sales" tabindex="0" role="button"><b>${fmt(A.revenue)}</b> sales value</span>`,
+    `<span class="chip" data-drill="sales" tabindex="0" role="button"><b>${A.bookings}</b>${A.bookings !== totalBk ? ' of ' + totalBk : ''} bookings${A.bookings !== totalBk ? ' in view' : ''}</span>`,
+    `<span class="chip" data-drill="spend" tabindex="0" role="button"><b>${fmt(A.expense)}</b> spend</span>`,
+    `<span class="chip ${net>=0?'pos':'neg'}" data-drill="net" tabindex="0" role="button"><b>${fmt(net)}</b> net</span>`
   ].join('') + (A.tokensView.length ? `<span class="chip" style="border-color:rgba(91,227,255,.4);color:var(--cyan)"><b>${A.tokensView.length}</b> tokens · ${fmt(A.tokenFeePotential)} fee if all book</span>` : '') + (A.bookings !== totalBk
     ? `<span class="chip" style="border-color:rgba(240,188,82,.4);color:var(--amber)">${totalBk - A.bookings} in other periods — switch to “All time”</span>` : '');
+
+  // total business · payment collected · payment due
+  const due = Math.max(0, A.revenue - A.received);
+  const collPct = A.revenue > 0 ? Math.min(1, A.received / A.revenue) : 0;
+  $('payStrip').innerHTML =
+    `<div class="paytile" data-drill="biz" tabindex="0" role="button"><div class="lbl">Total business</div><div class="v num">${fmt(A.revenue)}</div><div class="s">${A.bookings} bookings · agreement value</div></div>
+     <div class="paytile" data-drill="collected" tabindex="0" role="button"><div class="lbl">Payment collected</div><div class="v num" style="color:var(--jade)">${fmt(A.received)}</div><div class="s">${pct(collPct)} of total business</div></div>
+     <div class="paytile" data-drill="due" tabindex="0" role="button"><div class="lbl">Payment due</div><div class="v num" style="color:var(--amber)">${fmt(due)}</div><div class="s">${A.revenue > 0 ? pct(1 - collPct) : '–'} still to collect</div></div>
+     <div class="paybar"><i style="width:${(collPct * 100).toFixed(1)}%"></i></div>`;
 
   const cards = [
     ['Sales value / GDV', A.revenue, fmt, A.bookings + ' bookings', S.map(m=>m.revenue), '#F0BC52'],
@@ -2720,8 +2772,9 @@ function renderKPIs(A) {
     ['Cost per booking', cpb, v=>v==null||!isFinite(v)?'–':fmt(v), 'blended, all sources', S.map(m=>m.bookings?m.expense/m.bookings:0), '#A18BFF'],
     ['Avg ticket size', A.bookings?A.revenue/A.bookings:null, v=>v==null||!isFinite(v)?'–':fmt(v), 'agreement value', S.map(m=>m.bookings?m.revenue/m.bookings:0), '#3CE4A4']
   ];
-  $('kpiRow').innerHTML = cards.map(([l,,,d,sd,color,cls]) =>
-    `<div class="card kpi" style="padding-bottom:40px"><div class="lbl">${l}</div><div class="val num">–</div>
+  const DRILL_KEYS = ['sales', 'spend', 'net', 'cpb', 'ticket'];
+  $('kpiRow').innerHTML = cards.map(([l,,,d,sd,color,cls], i) =>
+    `<div class="card kpi" data-drill="${DRILL_KEYS[i]}" tabindex="0" role="button" title="Click to see the source data" style="padding-bottom:40px"><div class="lbl">${l}</div><div class="val num">–</div>
      <div class="delta ${cls||'flat'}">${d}</div>${spark(sd,color)}</div>`).join('');
   document.querySelectorAll('#kpiRow .val').forEach((el,i) => countUp(el, cards[i][1], cards[i][2]));
 }
@@ -3474,6 +3527,183 @@ if ($('saveTargets')) {
   $('tgGoRevise').onclick = () => $('tgEditor').scrollIntoView({ behavior: 'smooth', block: 'start' });
   $('tgGoAdd').onclick = () => document.querySelector('.navbtn[data-view="projects"]').click();
 }
+
+/* ════════════════ SOURCE DATA — tap a number, see the rows behind it ════════════════
+   Every figure on the Pulse hero and KPI cards (and the Total business / Collected / Due tiles) opens a
+   panel listing the exact bookings or expense entries that add up to it. The panel reads the same
+   numbers the page just drew (window.__A), so its totals always match what you clicked. */
+const DRILL_CAP = 400;   // rows drawn in one panel; the totals row always counts every row
+
+function dTbl_(heads, rows, total) {
+  // heads: [[label, rightAligned?], ...] · rows: arrays of ready-made cell HTML · total: optional array
+  const th = heads.map(h => `<th class="${h[1] ? 'r' : ''}">${h[0]}</th>`).join('');
+  const cls = i => heads[i][1] ? 'r num' : '';
+  const body = rows.map(r => '<tr>' + r.map((c, i) => `<td class="${cls(i)}">${c}</td>`).join('') + '</tr>').join('');
+  const foot = total ? '<tr style="background:rgba(240,188,82,.07)">' + total.map((c, i) => `<td class="${cls(i)}" style="font-weight:700;border-top:1px solid var(--line2)">${c}</td>`).join('') + '</tr>' : '';
+  return `<table><tr>${th}</tr>${body}${foot}</table>`;
+}
+const dSec_ = (title, html) => `<div class="section"><h3>${title}</h3><div style="overflow-x:auto">${html}</div></div>`;
+const dNote_ = txt => `<p class="hint" style="margin-top:10px">${txt}</p>`;
+const dCap_ = (shown, all, what) => all > shown ? `<p class="hint" style="margin-top:8px">Showing the first ${shown} of ${all} ${what} — the totals row counts all ${all}.</p>` : '';
+
+function dBookings_(rows) {
+  const shown = rows.slice(0, DRILL_CAP);
+  const sv = rows.reduce((a, s) => a + s.value, 0), sr = rows.reduce((a, s) => a + s.received, 0);
+  const heads = [['#'], ['Booking'], ['Date'], ['Project'], ['Unit'], ['Customer'], ['Source'], ['Sales person'], ['Agreement value', 1], ['Received', 1], ['Due', 1], ['Status']];
+  return dTbl_(heads, shown.map((s, i) => [i + 1, esc(s.id) || '–', ymdLocal(s.date), esc(s.project), esc(s.unit) || '–', esc(s.customer) || '–',
+      esc(s.source), esc(s.person) || '–', fmt(s.value), fmt(s.received), fmt(s.value - s.received), esc(s.status)]),
+    ['', 'Total · ' + rows.length, '', '', '', '', '', '', fmt(sv), fmt(sr), fmt(sv - sr), '']) + dCap_(shown.length, rows.length, 'bookings');
+}
+
+function dProj_(rows) {
+  const m = {};
+  rows.forEach(s => { const o = m[s.project] = m[s.project] || { name: s.project, n: 0, value: 0, fee: 0, received: 0 }; o.n++; o.value += s.value; o.fee += s.fee; o.received += s.received; });
+  return Object.values(m).sort((a, b) => b.value - a.value);
+}
+
+function dCats_(A) {
+  const by = {};
+  A.expDetail.forEach(e => { const o = by[e.category] = by[e.category] || { name: e.category, n: 0, amt: 0 }; o.n++; o.amt += e.counted; });
+  const cats = Object.values(by).sort((a, b) => b.amt - a.amt);
+  const total = cats.reduce((a, c) => a + c.amt, 0);
+  return dTbl_([['Category'], ['Entries', 1], ['Amount', 1], ['% of spend', 1]],
+    cats.map(c => [esc(c.name), c.n, fmt(c.amt), pct(total ? c.amt / total : NaN)]),
+    ['Total', A.expDetail.length, fmt(total), total ? '100.0%' : '–']);
+}
+
+function dExpDetail_(A) {
+  const alloc = F.project !== 'all';
+  const rows = A.expDetail.slice().sort((a, b) => b.date - a.date);
+  const shown = rows.slice(0, DRILL_CAP);
+  const bill = rows.reduce((a, e) => a + e.amount, 0), counted = rows.reduce((a, e) => a + e.counted, 0);
+  const heads = [['Date'], ['Scope'], ['Category'], ['Description'], ['Ref'], [alloc ? 'Bill amount' : 'Amount', 1]].concat(alloc ? [['Counted here', 1]] : []);
+  return dTbl_(heads,
+    shown.map(e => [ymdLocal(e.date), esc(e.scope), esc(e.category), esc(e.desc) + (e.auto ? ' <span class="pill good">auto</span>' : ''), esc(e.id) || '–', fmt(e.amount)].concat(alloc ? [fmt(e.counted)] : [])),
+    ['Total', '', '', '', '', fmt(alloc ? bill : counted)].concat(alloc ? [fmt(counted)] : [])) + dCap_(shown.length, rows.length, 'entries');
+}
+
+function buildDrill_(kind, A) {
+  const per = fyLabel(F.fy) + (F.month !== 'all' ? ' · ' + MONTHS[Number(F.month)] : '') + (F.project !== 'all' ? ' · ' + F.project : '');
+  const eyebrow = 'Source data · ' + per;
+  const S = A.sales.slice().sort((a, b) => b.date - a.date);
+  const proj = dProj_(S);
+  const net = A.fee - A.expense;
+  const avg = A.bookings ? A.revenue / A.bookings : null;
+  const chip = (l, v, cls) => `<span class="chip ${cls || ''}"><b>${v}</b> ${l}</span>`;
+  const scopeNote = 'Cancelled bookings and tokens are not counted.';
+  const allocNote = F.project !== 'all' ? ' A project is selected, so shared (CENTRAL) costs are counted in proportion to this project\'s share of revenue.' : '';
+  const salNote = ' Salaries are worked out automatically from the Team sheet (marked “auto”).';
+
+  switch (kind) {
+    case 'sales':
+      return { eyebrow, title: 'Sales value / GDV',
+        sub: 'The agreement value of every booking counted in this period. ' + scopeNote,
+        chips: [chip('sales value', fmt(A.revenue)), chip('bookings', A.bookings), chip('average ticket', avg != null ? fmt(avg) : '–')],
+        body: dSec_('By project', dTbl_([['Project'], ['Bookings', 1], ['Sales value', 1], ['Share', 1]],
+            proj.map(p => [esc(p.name), p.n, fmt(p.value), pct(A.revenue ? p.value / A.revenue : NaN)]),
+            ['Total', A.bookings, fmt(A.revenue), A.revenue ? '100.0%' : '–']))
+          + dSec_('Every booking', dBookings_(S)) };
+
+    case 'spend':
+      return { eyebrow, title: 'S&M spend',
+        sub: 'Every expense entry that adds up to the spend figure.' + allocNote + salNote,
+        chips: [chip('total spend', fmt(A.expense)), chip('entries', A.expDetail.length), chip('of revenue', A.fee ? pct(A.expense / A.fee) : '–')],
+        body: dSec_('By category', dCats_(A)) + dSec_('Every entry', dExpDetail_(A)) };
+
+    case 'net':
+      return { eyebrow, title: 'Net contribution',
+        sub: 'Revenue is Realtech’s commission (agreement value × the project’s commission rate), not the sales value. Net = revenue − spend.' + allocNote,
+        chips: [chip('revenue', fmt(A.fee)), chip('spend', fmt(A.expense)), chip('net', fmt(net), net >= 0 ? 'pos' : 'neg')],
+        body: `<div class="insight ${net >= 0 ? 'good' : 'risk'}" style="margin:16px 0 0"><h4>${fmt(A.fee)} revenue − ${fmt(A.expense)} spend = ${fmt(net)}</h4><p>Open “S&amp;M spend” to see each expense entry.</p></div>`
+          + dSec_('Revenue (commission) by project', dTbl_([['Project'], ['Bookings', 1], ['Sales value', 1], ['Commission rate', 1], ['Revenue', 1]],
+              proj.map(p => [esc(p.name), p.n, fmt(p.value), (rateOf(p.name) * 100).toFixed(2) + '%', fmt(p.fee)]),
+              ['Total', A.bookings, fmt(A.revenue), A.revenue ? (A.fee / A.revenue * 100).toFixed(2) + '%' : '–', fmt(A.fee)]))
+          + dSec_('Spend by category', dCats_(A)) };
+
+    case 'cpb': {
+      const bySrc = {};
+      A.expDetail.forEach(e => { const o = bySrc[e.source] = bySrc[e.source] || { name: e.source, spend: 0, n: 0 }; o.spend += e.counted; });
+      S.forEach(s => { const o = bySrc[s.source] = bySrc[s.source] || { name: s.source, spend: 0, n: 0 }; o.n++; });
+      const rows = Object.values(bySrc).sort((a, b) => b.spend - a.spend);
+      return { eyebrow, title: 'Cost per booking',
+        sub: 'Total spend ÷ number of bookings. Spend that has no bookings of its own (salaries, overheads) is still part of the blended figure.' + allocNote,
+        chips: [chip('cost per booking', A.bookings ? fmt(A.expense / A.bookings) : '–'), chip('total spend', fmt(A.expense)), chip('bookings', A.bookings)],
+        body: dSec_('By source', dTbl_([['Source'], ['Spend', 1], ['Bookings', 1], ['Cost / booking', 1]],
+            rows.map(r => [esc(r.name), fmt(r.spend), r.n || '–', r.n ? fmt(r.spend / r.n) : '–']),
+            ['Blended', fmt(A.expense), A.bookings, A.bookings ? fmt(A.expense / A.bookings) : '–']))
+          + dSec_('Spend entries behind it', dExpDetail_(A)) };
+    }
+
+    case 'ticket': {
+      const byV = S.slice().sort((a, b) => b.value - a.value);
+      return { eyebrow, title: 'Avg ticket size',
+        sub: 'Sales value ÷ number of bookings. ' + scopeNote,
+        chips: [chip('average ticket', avg != null ? fmt(avg) : '–'), chip('sales value', fmt(A.revenue)), chip('bookings', A.bookings)]
+          .concat(byV.length ? [chip('largest', fmt(byV[0].value)), chip('smallest', fmt(byV[byV.length - 1].value))] : []),
+        body: dSec_('Average by project', dTbl_([['Project'], ['Bookings', 1], ['Sales value', 1], ['Avg ticket', 1]],
+            proj.map(p => [esc(p.name), p.n, fmt(p.value), fmt(p.value / p.n)]),
+            ['Total', A.bookings, fmt(A.revenue), avg != null ? fmt(avg) : '–']))
+          + dSec_('Every booking, largest first', dBookings_(byV)) };
+    }
+
+    case 'biz': case 'collected': case 'due': {
+      const due = Math.max(0, A.revenue - A.received);
+      const cp = A.revenue > 0 ? Math.min(1, A.received / A.revenue) : 0;
+      let rows = S.slice(), title, sub, listTitle;
+      if (kind === 'collected') {
+        rows = rows.filter(s => s.received > 0).sort((a, b) => b.received - a.received);
+        title = 'Payment collected'; listTitle = 'Bookings with money received, largest first';
+        sub = 'The “Amount received” recorded against each booking. ' + scopeNote;
+      } else if (kind === 'due') {
+        rows = rows.filter(s => s.value - s.received > 0).sort((a, b) => (b.value - b.received) - (a.value - a.received));
+        title = 'Payment due'; listTitle = 'Bookings with money still to come, largest first';
+        sub = 'Agreement value minus amount received, booking by booking. ' + scopeNote;
+      } else {
+        rows.sort((a, b) => b.value - a.value);
+        title = 'Total business'; listTitle = 'Every booking, largest first';
+        sub = 'The agreement value of all bookings in this period. ' + scopeNote;
+      }
+      const projTbl = dTbl_([['Project'], ['Total business', 1], ['Collected', 1], ['Due', 1], ['% collected', 1]],
+        proj.map(p => [esc(p.name), fmt(p.value), fmt(p.received), fmt(p.value - p.received), pct(p.value ? p.received / p.value : NaN)]),
+        ['Total', fmt(A.revenue), fmt(A.received), fmt(due), A.revenue ? pct(cp) : '–']);
+      return { eyebrow, title, sub,
+        chips: [chip('total business', fmt(A.revenue)), chip('collected · ' + pct(cp), fmt(A.received), 'pos'), chip('due', fmt(due))],
+        body: dSec_('By project', projTbl) + dSec_(listTitle, dBookings_(rows))
+          + dNote_('“Collected” is the Amount received entered on each booking in the Sales_Log sheet. If later instalments are not updated there, Due will look larger than what is actually outstanding.') };
+    }
+  }
+  return null;
+}
+
+function openDrill(kind) {
+  const A = window.__A;
+  if (!A) return;
+  const D = buildDrill_(kind, A);
+  if (!D) return;
+  $('drillEyebrow').textContent = D.eyebrow;
+  $('drillTitle').textContent = D.title;
+  $('drillSub').textContent = D.sub;
+  $('drillChips').innerHTML = D.chips.join('');
+  $('drillBody').innerHTML = D.body;
+  $('drillModal').classList.add('show');
+  document.body.style.overflow = 'hidden';
+  const card = $('drillModal').querySelector('.drillcard');
+  if (card) card.scrollTop = 0;
+}
+function closeDrill() {
+  $('drillModal').classList.remove('show');
+  document.body.style.overflow = '';
+}
+document.addEventListener('click', e => {
+  const t = e.target.closest ? e.target.closest('[data-drill]') : null;
+  if (t) { openDrill(t.dataset.drill); return; }
+  if (e.target === $('drillModal')) closeDrill();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeDrill();
+  else if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('[data-drill]')) { e.preventDefault(); openDrill(e.target.dataset.drill); }
+});
+$('drillClose').onclick = closeDrill;
 
 /* ════════════════ NAV & FILTERS ════════════════ */
 document.querySelectorAll('.navbtn').forEach(b => b.onclick = () => {
