@@ -233,8 +233,9 @@ body.role-viewer .wr{display:none!important}
 
 /* ═══ click-through: tap a number to see the data behind it ═══ */
 [data-drill]{cursor:pointer}
-.kpi[data-drill]::after{content:'↗';position:absolute;top:14px;right:16px;font-size:13px;color:var(--brass);opacity:.4;transition:.18s}
-.kpi[data-drill]:hover::after{opacity:1}
+.kpi[data-drill]::after,.intel[data-drill]::after{content:'↗';position:absolute;top:14px;right:16px;font-size:13px;color:var(--brass);opacity:.4;transition:.18s}
+.kpi[data-drill]:hover::after,.intel[data-drill]:hover::after{opacity:1}
+.intel[data-drill]:hover{border-color:rgba(240,188,82,.38)}
 .chip[data-drill]:hover,.paytile[data-drill]:hover{border-color:rgba(240,188,82,.5);background:rgba(240,188,82,.07)}
 .paystrip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:16px}
 .paytile{border:1px solid var(--line);border-radius:14px;padding:12px 14px;background:rgba(255,255,255,.025);transition:.18s}
@@ -248,6 +249,10 @@ body.role-viewer .wr{display:none!important}
 .drillhead .eyebrow{font-size:10px;letter-spacing:.24em;text-transform:uppercase;color:var(--brass);font-family:'JetBrains Mono',monospace;margin-bottom:8px}
 .drillhead h2{font-size:26px;font-weight:700;letter-spacing:-.02em;margin-bottom:6px}
 .drillcard .chips{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 4px}
+.three{grid-template-columns:repeat(3,minmax(0,1fr))}
+.intel .chips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 14px}
+.intel .chip{font-size:10.5px;padding:5px 10px}
+@media(max-width:1180px){.three{grid-template-columns:1fr}}
 
 #busy{position:fixed;top:12px;right:16px;z-index:95;display:none;align-items:center;gap:9px;padding:8px 14px;border-radius:999px;font-size:12px;color:var(--text);
   background:rgba(10,15,30,.94);border:1px solid rgba(240,188,82,.4);box-shadow:var(--glow-brass)}
@@ -387,6 +392,27 @@ body.role-viewer .wr{display:none!important}
       </div>
 
       <div class="grid kpis" id="kpiRow"></div>
+
+      <div class="grid three section" id="intelRow">
+        <div class="card intel" data-drill="bve" tabindex="0" role="button" title="Click to see the source data">
+          <h3>Budget vs expenses</h3>
+          <div class="chips" id="intelBve"></div>
+          <div class="chartbox" style="height:300px"><canvas id="chBve"></canvas></div>
+          <p class="hint" id="intelNoteBve" style="margin-top:10px"></p>
+        </div>
+        <div class="card intel" data-drill="bvb" tabindex="0" role="button" title="Click to see the source data">
+          <h3>Budget vs business</h3>
+          <div class="chips" id="intelBvb"></div>
+          <div class="chartbox" style="height:300px"><canvas id="chBvb"></canvas></div>
+          <p class="hint" id="intelNoteBvb" style="margin-top:10px"></p>
+        </div>
+        <div class="card intel" data-drill="bvx" tabindex="0" role="button" title="Click to see the source data">
+          <h3>Business vs expenses</h3>
+          <div class="chips" id="intelBvx"></div>
+          <div class="chartbox" style="height:300px"><canvas id="chBvx"></canvas></div>
+          <p class="hint" id="intelNoteBvx" style="margin-top:10px"></p>
+        </div>
+      </div>
 
       <div class="grid two section">
         <div class="card">
@@ -1732,6 +1758,8 @@ function analyse() {
   const lifeCtx = { exps: allExps, rules, rosterByName,
     active: allSales.filter(s => s.status !== 'Cancelled' && s.status !== 'Token'),
     tokens: allSales.filter(s => s.status === 'Token') };
+  // period context — same shape as lifeCtx, but only what falls in the selected year / month (all projects; callers pick one)
+  const periodCtx = { exps, rules, rosterByName, active, tokens: tokenRows };
   const budTotal = budgetRows.reduce((a,r) => a + r.budget, 0);
   const budActual = budgetRows.reduce((a,r) => a + r.actual, 0);
 
@@ -1739,7 +1767,7 @@ function analyse() {
     bySource, overheads, sites, series, pacing, elapsed, fc, activeMonths,
     fyToDateFee, fcFyTotal, health, centralTotal, team, roster, pnl, mip,
     rules, tokensView, tokensAll: tokenRows, tokenFeePotential, accr, payables,
-    budCtx, budgetRows, budTotal, budActual, lifeCtx };
+    budCtx, budgetRows, budTotal, budActual, lifeCtx, periodCtx };
 }
 
 /* ── scoped budget rows: scope = 'ALL' (company) or a project name ── */
@@ -2027,7 +2055,7 @@ function buildInsights(A) {
 function renderAll() {
   const A = analyse();
   window.__A = A;   // the click-through panel reads the latest numbers from here
-  renderKPIs(A); renderHealth(A); renderCharts(A);
+  renderKPIs(A); renderIntel(A); renderHealth(A); renderCharts(A);
   renderSourceTable(A); renderSiteTable(A); renderOverheads(A);
   renderPnl(A); renderTeam(A);
   renderTokens(A); renderBudget(A);
@@ -3530,6 +3558,91 @@ if ($('saveTargets')) {
   $('tgGoAdd').onclick = () => document.querySelector('.navbtn[data-view="projects"]').click();
 }
 
+/* ════════════════ BUDGET · BUSINESS · EXPENSES (Pulse) ════════════════
+   "Business" = Realtech's commission. "Budget" = the project-life budgets set in the Budget tab (summed over the
+   projects in view). The project filter applies to all three; year / month apply to the business and spend sides
+   ("in period"). Budgets are for a project's whole life, so the budget itself does not change with year or month. */
+function intelData_(A) {
+  const names = PJ().map(p => p.name).filter(n => F.project === 'all' || nrm(n) === nrm(F.project));
+  const heads = {}, projects = [];
+  names.forEach(n => {
+    const L = projectLifeRows(A.lifeCtx, n), P = projectLifeRows(A.periodCtx, n);
+    const row = { name: n, budget: 0, life: 0, period: 0, lifeBiz: 0, perBiz: 0 };
+    L.rows.forEach((r, i) => {
+      const h = heads[r.name] = heads[r.name] || { name: r.name, budget: 0, life: 0, period: 0 };
+      h.budget += r.budget; h.life += r.actual; h.period += P.rows[i].actual;
+      row.budget += r.budget; row.life += r.actual; row.period += P.rows[i].actual;
+    });
+    row.lifeBiz = A.lifeCtx.active.filter(s => nrm(s.project) === nrm(n)).reduce((a, s) => a + s.fee, 0);
+    row.perBiz = A.periodCtx.active.filter(s => nrm(s.project) === nrm(n)).reduce((a, s) => a + s.fee, 0);
+    projects.push(row);
+  });
+  const sum = (arr, k) => arr.reduce((a, x) => a + x[k], 0), hl = Object.values(heads);
+  return { heads: hl, projects, budget: sum(hl, 'budget'), life: sum(hl, 'life'), period: sum(hl, 'period'),
+    lifeBiz: sum(projects, 'lifeBiz'), perBiz: sum(projects, 'perBiz') };
+}
+
+function renderIntel(A) {
+  const I = A.intel = intelData_(A);
+  const chip = (l, v, cls) => `<span class="chip ${cls || ''}"><b>${v}</b> ${l}</span>`;
+  const short = n => String(n).replace(/^Mangalam\s+/i, '');
+  const tick = { callback: v => fmt(v), font: { family: "'JetBrains Mono', monospace", size: 10 } };
+  const tooltip = { backgroundColor: 'rgba(11,17,32,.95)', borderColor: 'rgba(240,188,82,.35)', borderWidth: 1, padding: 12,
+    callbacks: { label: c => ' ' + c.dataset.label + ': ' + fmt(c.raw) } };
+  const legend = { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'rectRounded', boxWidth: 8, padding: 14 } };
+  const bar = (label, data, color, fill) => ({ label, data, backgroundColor: fill || color, borderColor: color, borderWidth: 1, borderRadius: 4 });
+  const GREY = 'rgba(125,155,215,.55)', GREYFILL = 'rgba(125,155,215,.28)';
+
+  // 1 · budget vs expenses, head by head
+  const util = I.budget > 0 ? I.life / I.budget : null;
+  $('intelBve').innerHTML = [chip('budget', fmt(I.budget)),
+    chip('spent to date' + (util != null ? ' · ' + pct(util) : ''), fmt(I.life), util != null && util > 1 ? 'neg' : ''),
+    chip('spent in period', fmt(I.period))].join('');
+  const hs = I.heads.filter(h => h.budget > 0 || h.life > 0 || h.period > 0)
+    .sort((a, b) => Math.max(b.budget, b.life) - Math.max(a.budget, a.life)).slice(0, 12);
+  killChart('bve');
+  charts.bve = new Chart($('chBve'), { type: 'bar',
+    data: { labels: hs.map(h => h.name), datasets: [
+      bar('Budget', hs.map(h => h.budget), GREY, GREYFILL),
+      bar('Spent to date', hs.map(h => h.life), '#5BE3FF', 'rgba(91,227,255,.55)'),
+      bar('Spent in period', hs.map(h => h.period), '#F0BC52', 'rgba(240,188,82,.70)') ] },
+    options: { indexAxis: 'y', maintainAspectRatio: false, plugins: { legend, tooltip },
+      scales: { x: { ticks: tick }, y: { grid: { display: false } } } } });
+  $('intelNoteBve').textContent = I.budget > 0
+    ? 'Budgets cover a project’s whole life, so the budget bar stays put; “spent in period” follows the year / month / project you picked.'
+    : 'No budget is set for this view yet — set total budgets under Budget → pick a project.';
+
+  // 2 · budget vs business, project by project
+  const cover = I.budget > 0 ? I.lifeBiz / I.budget : null;
+  $('intelBvb').innerHTML = [chip('budget', fmt(I.budget)), chip('business to date', fmt(I.lifeBiz)),
+    chip('business in period', fmt(I.perBiz)),
+    chip('business ÷ budget', cover != null ? cover.toFixed(2) + '×' : '–', cover != null && cover < 1 ? 'neg' : 'pos')].join('');
+  killChart('bvb');
+  charts.bvb = new Chart($('chBvb'), { type: 'bar',
+    data: { labels: I.projects.map(p => short(p.name)), datasets: [
+      bar('Budget', I.projects.map(p => p.budget), GREY, GREYFILL),
+      bar('Business to date', I.projects.map(p => p.lifeBiz), '#3CE4A4', 'rgba(60,228,164,.55)'),
+      bar('Business in period', I.projects.map(p => p.perBiz), '#F0BC52', 'rgba(240,188,82,.70)') ] },
+    options: { maintainAspectRatio: false, plugins: { legend, tooltip },
+      scales: { x: { grid: { display: false } }, y: { ticks: tick } } } });
+  $('intelNoteBvb').textContent = 'Business is your commission. “To date” counts everything since each project started; “in period” follows year / month. Budget is the project-life total.';
+
+  // 3 · business vs expenses, month by month
+  const net = A.fee - A.expense;
+  $('intelBvx').innerHTML = [chip('business', fmt(A.fee)), chip('expenses', fmt(A.expense)),
+    chip('net', fmt(net), net >= 0 ? 'pos' : 'neg'),
+    chip('spend of business', A.fee > 0 ? pct(A.expense / A.fee) : '–')].join('');
+  killChart('bvx');
+  charts.bvx = new Chart($('chBvx'), {
+    data: { labels: A.series.map(m => m.label), datasets: [
+      { type: 'bar', label: 'Business', data: A.series.map(m => m.fee), backgroundColor: 'rgba(60,228,164,.55)', borderColor: '#3CE4A4', borderWidth: 1, borderRadius: 4 },
+      { type: 'bar', label: 'Expenses', data: A.series.map(m => m.expense), backgroundColor: 'rgba(255,111,98,.55)', borderColor: '#FF6F62', borderWidth: 1, borderRadius: 4 },
+      { type: 'line', label: 'Net', data: A.series.map(m => m.fee - m.expense), borderColor: '#5BE3FF', backgroundColor: '#5BE3FF', tension: .3, pointRadius: 2.5, borderWidth: 2 } ] },
+    options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend, tooltip },
+      scales: { x: { grid: { display: false } }, y: { ticks: tick } } } });
+  $('intelNoteBvx').textContent = 'Same business and expense figures as the cards above. The chart shows every month of the selected year; the chips follow the month you picked.';
+}
+
 /* ════════════════ SOURCE DATA — tap a number, see the rows behind it ════════════════
    Every figure on the Pulse hero and KPI cards (and the Total business / Collected / Due tiles) opens a
    panel listing the exact bookings or expense entries that add up to it. The panel reads the same
@@ -3665,6 +3778,46 @@ function buildDrill_(kind, A) {
             proj.map(p => [esc(p.name), p.n, fmt(p.value), fmt(p.value / p.n)]),
             ['Total', A.bookings, fmt(A.revenue), avg != null ? fmt(avg) : '–']))
           + dSec_('Every booking, largest first', dBookings_(byV)) };
+    }
+
+    case 'bve': {
+      const I = A.intel || intelData_(A);
+      const hs = I.heads.filter(h => h.budget > 0 || h.life > 0 || h.period > 0).sort((a, b) => b.life - a.life);
+      const u = I.budget > 0 ? I.life / I.budget : null;
+      const used = (spent, b) => b > 0 ? pct(spent / b) : '–';
+      return { eyebrow, title: 'Budget vs expenses',
+        sub: 'Budget is set per project for its whole life (Budget tab), so it does not change with year or month. “Spent in period” follows your filters; “spent to date” counts everything since each project started. Shared central costs are not part of project budgets.' + salNote,
+        chips: [chip('budget', fmt(I.budget)), chip('spent to date', fmt(I.life)), chip('remaining', I.budget > 0 ? fmt(I.budget - I.life) : '–'), chip('spent in period', fmt(I.period))],
+        body: dSec_('By budget head', dTbl_([['Head'], ['Budget', 1], ['Spent to date', 1], ['Remaining', 1], ['Used', 1], ['Spent in period', 1]],
+            hs.map(h => [esc(h.name), h.budget > 0 ? fmt(h.budget) : '–', fmt(h.life), h.budget > 0 ? fmt(h.budget - h.life) : '–', used(h.life, h.budget), fmt(h.period)]),
+            ['Total', fmt(I.budget), fmt(I.life), I.budget > 0 ? fmt(I.budget - I.life) : '–', u != null ? pct(u) : '–', fmt(I.period)]))
+          + dSec_('By project', dTbl_([['Project'], ['Budget', 1], ['Spent to date', 1], ['Used', 1], ['Spent in period', 1]],
+            I.projects.map(p => [esc(p.name), p.budget > 0 ? fmt(p.budget) : '–', fmt(p.life), used(p.life, p.budget), fmt(p.period)]),
+            ['Total', fmt(I.budget), fmt(I.life), u != null ? pct(u) : '–', fmt(I.period)])) };
+    }
+
+    case 'bvb': {
+      const I = A.intel || intelData_(A);
+      const x = (b, v) => b > 0 ? (v / b).toFixed(2) + '×' : '–';
+      return { eyebrow, title: 'Budget vs business',
+        sub: 'Business is your commission (agreement value × the project’s rate). Budget is the project-life total from the Budget tab. “To date” counts everything since each project started; “in period” follows your year / month. ' + scopeNote,
+        chips: [chip('budget', fmt(I.budget)), chip('business to date', fmt(I.lifeBiz)), chip('business in period', fmt(I.perBiz)), chip('business ÷ budget', x(I.budget, I.lifeBiz))],
+        body: dSec_('By project', dTbl_([['Project'], ['Budget', 1], ['Business to date', 1], ['Business in period', 1], ['Business ÷ budget', 1]],
+            I.projects.map(p => [esc(p.name), p.budget > 0 ? fmt(p.budget) : '–', fmt(p.lifeBiz), fmt(p.perBiz), x(p.budget, p.lifeBiz)]),
+            ['Total', fmt(I.budget), fmt(I.lifeBiz), fmt(I.perBiz), x(I.budget, I.lifeBiz)]))
+          + dNote_('“Business ÷ budget” shows how many times your commission earned so far covers the budget. Below 1× means the budget is bigger than the commission earned to date.') };
+    }
+
+    case 'bvx': {
+      const rows = A.series.filter(m => m.fee > 0 || m.expense > 0);
+      const bz = rows.reduce((a, m) => a + m.fee, 0), ex = rows.reduce((a, m) => a + m.expense, 0);
+      return { eyebrow, title: 'Business vs expenses',
+        sub: 'Month by month for the selected year — business is your commission, expenses are everything counted in S&M spend.' + allocNote + salNote,
+        chips: [chip('business', fmt(A.fee)), chip('expenses', fmt(A.expense)), chip('net', fmt(net), net >= 0 ? 'pos' : 'neg'), chip('spend of business', A.fee > 0 ? pct(A.expense / A.fee) : '–')],
+        body: dSec_('Every month', dTbl_([['Month'], ['Business', 1], ['Expenses', 1], ['Net', 1], ['Spend of business', 1]],
+            rows.map(m => [esc(m.label), fmt(m.fee), fmt(m.expense), fmt(m.fee - m.expense), m.fee > 0 ? pct(m.expense / m.fee) : '–']),
+            ['Total (months shown)', fmt(bz), fmt(ex), fmt(bz - ex), bz > 0 ? pct(ex / bz) : '–']))
+          + dNote_('If you picked a single month at the top, the chips above show that month while this table lists the whole year.') };
     }
 
     case 'biz': case 'collected': case 'due': {
