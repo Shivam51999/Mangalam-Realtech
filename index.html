@@ -2756,13 +2756,15 @@ function renderKPIs(A) {
   ].join('') + (A.tokensView.length ? `<span class="chip" style="border-color:rgba(91,227,255,.4);color:var(--cyan)"><b>${A.tokensView.length}</b> tokens · ${fmt(A.tokenFeePotential)} fee if all book</span>` : '') + (A.bookings !== totalBk
     ? `<span class="chip" style="border-color:rgba(240,188,82,.4);color:var(--amber)">${totalBk - A.bookings} in other periods — switch to “All time”</span>` : '');
 
-  // total business · payment collected · payment due
-  const due = Math.max(0, A.revenue - A.received);
-  const collPct = A.revenue > 0 ? Math.min(1, A.received / A.revenue) : 0;
+  // total business (= Realtech's commission) · commission collected · commission due
+  const CT = commTotals_(A.sales);
+  const due = Math.max(0, CT.fee - CT.received);
+  const collPct = CT.fee > 0 ? Math.min(1, CT.received / CT.fee) : 0;
+  const awaiting = Math.max(0, CT.billed - CT.received), notBilled = Math.max(0, CT.fee - CT.billed);
   $('payStrip').innerHTML =
-    `<div class="paytile" data-drill="biz" tabindex="0" role="button"><div class="lbl">Total business</div><div class="v num">${fmt(A.revenue)}</div><div class="s">${A.bookings} bookings · agreement value</div></div>
-     <div class="paytile" data-drill="collected" tabindex="0" role="button"><div class="lbl">Payment collected</div><div class="v num" style="color:var(--jade)">${fmt(A.received)}</div><div class="s">${pct(collPct)} of total business</div></div>
-     <div class="paytile" data-drill="due" tabindex="0" role="button"><div class="lbl">Payment due</div><div class="v num" style="color:var(--amber)">${fmt(due)}</div><div class="s">${A.revenue > 0 ? pct(1 - collPct) : '–'} still to collect</div></div>
+    `<div class="paytile" data-drill="biz" tabindex="0" role="button"><div class="lbl">Total business</div><div class="v num">${fmt(CT.fee)}</div><div class="s">your commission · ${A.bookings} bookings</div></div>
+     <div class="paytile" data-drill="collected" tabindex="0" role="button"><div class="lbl">Payment collected</div><div class="v num" style="color:var(--jade)">${fmt(CT.received)}</div><div class="s">${pct(collPct)} of commission received</div></div>
+     <div class="paytile" data-drill="due" tabindex="0" role="button"><div class="lbl">Payment due</div><div class="v num" style="color:var(--amber)">${fmt(due)}</div><div class="s">${fmt(awaiting)} billed · ${fmt(notBilled)} not billed yet</div></div>
      <div class="paybar"><i style="width:${(collPct * 100).toFixed(1)}%"></i></div>`;
 
   const cards = [
@@ -3532,6 +3534,25 @@ if ($('saveTargets')) {
    Every figure on the Pulse hero and KPI cards (and the Total business / Collected / Due tiles) opens a
    panel listing the exact bookings or expense entries that add up to it. The panel reads the same
    numbers the page just drew (window.__A), so its totals always match what you clicked. */
+/* Realtech's own commission per booking: potential (agreement value × rate), billed (invoice raised), received (marked received). */
+function commOf_(s) {
+  const billed = (s.billStatus === 'Invoiced' || s.billStatus === 'Received') ? (s.invoiceAmt || s.fee) : 0;
+  const received = s.billStatus === 'Received' ? (s.invoiceAmt || s.fee) : 0;
+  return { fee: s.fee, billed, received, due: s.fee - received };
+}
+function commTotals_(rows) {
+  return rows.reduce((a, s) => { const c = commOf_(s); a.fee += c.fee; a.billed += c.billed; a.received += c.received; return a; }, { fee: 0, billed: 0, received: 0 });
+}
+function dCommBookings_(rows) {
+  const shown = rows.slice(0, DRILL_CAP);
+  const T = rows.reduce((a, r) => { a.agree += r.s.value; a.fee += r.fee; a.rec += r.received; a.due += r.due; return a; }, { agree: 0, fee: 0, rec: 0, due: 0 });
+  const label = b => b === 'Received' ? '<span class="pill good">Received</span>' : b === 'Invoiced' ? '<span class="pill warn">Bill raised</span>' : '<span class="hint">Not billed</span>';
+  const heads = [['#'], ['Booking'], ['Date'], ['Project'], ['Customer'], ['Agreement value', 1], ['Rate', 1], ['Commission', 1], ['Bill', 0], ['Received', 1], ['Due', 1]];
+  return dTbl_(heads, shown.map((r, i) => [i + 1, esc(r.s.id) || '–', ymdLocal(r.s.date), esc(r.s.project), esc(r.s.customer) || '–',
+      fmt(r.s.value), (rateOf(r.s.project) * 100).toFixed(2) + '%', fmt(r.fee), label(r.s.billStatus), fmt(r.received), fmt(r.due)]),
+    ['', 'Total · ' + rows.length, '', '', '', fmt(T.agree), '', fmt(T.fee), '', fmt(T.rec), fmt(T.due)]) + dCap_(shown.length, rows.length, 'bookings');
+}
+
 const DRILL_CAP = 400;   // rows drawn in one panel; the totals row always counts every row
 
 function dTbl_(heads, rows, total) {
@@ -3647,29 +3668,35 @@ function buildDrill_(kind, A) {
     }
 
     case 'biz': case 'collected': case 'due': {
-      const due = Math.max(0, A.revenue - A.received);
-      const cp = A.revenue > 0 ? Math.min(1, A.received / A.revenue) : 0;
-      let rows = S.slice(), title, sub, listTitle;
+      const CT = commTotals_(S);
+      const due = Math.max(0, CT.fee - CT.received);
+      const cp = CT.fee > 0 ? Math.min(1, CT.received / CT.fee) : 0;
+      const awaiting = Math.max(0, CT.billed - CT.received), notBilled = Math.max(0, CT.fee - CT.billed);
+      let rows = S.map(s => ({ s, ...commOf_(s) })), title, sub, listTitle;
       if (kind === 'collected') {
-        rows = rows.filter(s => s.received > 0).sort((a, b) => b.received - a.received);
-        title = 'Payment collected'; listTitle = 'Bookings with money received, largest first';
-        sub = 'The “Amount received” recorded against each booking. ' + scopeNote;
+        rows = rows.filter(r => r.received > 0).sort((a, b) => b.received - a.received);
+        title = 'Payment collected'; listTitle = 'Bookings whose commission is received, largest first';
+        sub = 'Commission you have already received: bills that were raised and marked “Received” in the Sales tab. ' + scopeNote;
       } else if (kind === 'due') {
-        rows = rows.filter(s => s.value - s.received > 0).sort((a, b) => (b.value - b.received) - (a.value - a.received));
-        title = 'Payment due'; listTitle = 'Bookings with money still to come, largest first';
-        sub = 'Agreement value minus amount received, booking by booking. ' + scopeNote;
+        rows = rows.filter(r => r.due > 0).sort((a, b) => b.due - a.due);
+        title = 'Payment due'; listTitle = 'Bookings with commission still to receive, largest first';
+        sub = 'Your commission not yet marked received — bills already raised plus commission not billed yet. ' + scopeNote;
       } else {
-        rows.sort((a, b) => b.value - a.value);
-        title = 'Total business'; listTitle = 'Every booking, largest first';
-        sub = 'The agreement value of all bookings in this period. ' + scopeNote;
+        rows.sort((a, b) => b.fee - a.fee);
+        title = 'Total business'; listTitle = 'Every booking, largest commission first';
+        sub = 'Your business is your commission: agreement value × each project’s commission rate, on every booking in this period. ' + scopeNote;
       }
-      const projTbl = dTbl_([['Project'], ['Total business', 1], ['Collected', 1], ['Due', 1], ['% collected', 1]],
-        proj.map(p => [esc(p.name), fmt(p.value), fmt(p.received), fmt(p.value - p.received), pct(p.value ? p.received / p.value : NaN)]),
-        ['Total', fmt(A.revenue), fmt(A.received), fmt(due), A.revenue ? pct(cp) : '–']);
+      const by = {};
+      S.forEach(s => { const c = commOf_(s), o = by[s.project] = by[s.project] || { name: s.project, n: 0, fee: 0, billed: 0, received: 0 }; o.n++; o.fee += c.fee; o.billed += c.billed; o.received += c.received; });
+      const prj = Object.values(by).sort((a, b) => b.fee - a.fee);
+      const projTbl = dTbl_([['Project'], ['Bookings', 1], ['Commission', 1], ['Billed', 1], ['Received', 1], ['Due', 1], ['% received', 1]],
+        prj.map(p => [esc(p.name), p.n, fmt(p.fee), fmt(p.billed), fmt(p.received), fmt(p.fee - p.received), pct(p.fee ? p.received / p.fee : NaN)]),
+        ['Total', A.bookings, fmt(CT.fee), fmt(CT.billed), fmt(CT.received), fmt(due), CT.fee ? pct(cp) : '–']);
       return { eyebrow, title, sub,
-        chips: [chip('total business', fmt(A.revenue)), chip('collected · ' + pct(cp), fmt(A.received), 'pos'), chip('due', fmt(due))],
-        body: dSec_('By project', projTbl) + dSec_(listTitle, dBookings_(rows))
-          + dNote_('“Collected” is the Amount received entered on each booking in the Sales_Log sheet. If later instalments are not updated there, Due will look larger than what is actually outstanding.') };
+        chips: [chip('total business (commission)', fmt(CT.fee)), chip('received · ' + pct(cp), fmt(CT.received), 'pos'), chip('due', fmt(due)),
+                chip('bills raised, awaiting', fmt(awaiting)), chip('not billed yet', fmt(notBilled))],
+        body: dSec_('By project', projTbl) + dSec_(listTitle, dCommBookings_(rows))
+          + dNote_('Flow in the Sales tab: set a booking to “Agreement Done” → Raise bill → Mark received. Commission counts as collected only after “Mark received”.') };
     }
   }
   return null;
