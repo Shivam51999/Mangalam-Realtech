@@ -2381,6 +2381,35 @@ $('bkBulkRaise').onclick = async function() {
 
 $('bkBulkPrint').onclick = () => printConsolidated(bkSelected_().filter(isBilled_).map(s => s.id));
 
+/* ── full-figure money for invoices: ₹1,02,00,000.00 (Indian grouping), plus the amount in words ── */
+function inrFull_(v) {
+  const n = Number(v) || 0;
+  return '₹' + n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function rupeesInWords_(amount) {
+  const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve',
+    'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+  const below100 = n => n < 20 ? ones[n] : tens[Math.floor(n / 10)] + (n % 10 ? ' ' + ones[n % 10] : '');
+  const below1000 = n => (n >= 100 ? ones[Math.floor(n / 100)] + ' Hundred' + (n % 100 ? ' ' : '') : '') + (n % 100 ? below100(n % 100) : '');
+  const words = n => {
+    if (n === 0) return '';
+    const out = [];
+    const crore = Math.floor(n / 10000000); n %= 10000000;
+    const lakh = Math.floor(n / 100000); n %= 100000;
+    const thou = Math.floor(n / 1000); n %= 1000;
+    if (crore) out.push(words(crore) + ' Crore');
+    if (lakh) out.push(below100(lakh) + ' Lakh');
+    if (thou) out.push(below100(thou) + ' Thousand');
+    if (n) out.push(below1000(n));
+    return out.join(' ');
+  };
+  const total = Math.round((Number(amount) || 0) * 100);
+  const rupees = Math.floor(total / 100), paise = total % 100;
+  if (!rupees && !paise) return 'Rupees Zero Only';
+  return 'Rupees ' + (rupees ? words(rupees) : 'Zero') + (paise ? ' and ' + below100(paise) + ' Paise' : '') + ' Only';
+}
+
 function printConsolidated(ids) {
   const all = normSales();
   const rows = ids.map(id => all.find(x => x.id === id)).filter(Boolean);
@@ -2388,46 +2417,90 @@ function printConsolidated(ids) {
   const w = window.open('', '_blank');
   if (!w) return toast('Allow pop-ups to view the bill');
   const rawOf = id => (DB.sales || []).find(r => String(r['Booking ID']||'').trim() === String(id).trim()) || {};
+  const dmy = v => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(v || '')); return m ? m[3] + '-' + m[2] + '-' + m[1] : (v ? String(v) : ''); };
+  const invNum = s => { const m = /(\d+)\s*$/.exec(String(rawOf(s.id)['Invoice No'] || '')); return m ? parseInt(m[1], 10) : Infinity; };
   const groups = {};
   rows.forEach(s => { (groups[s.project] = groups[s.project] || []).push(s); });
-  let grand = 0;
-  const sections = Object.keys(groups).map(proj => {
-    const g = groups[proj].sort((a, b) => a.date - b.date);
+  const pages = Object.keys(groups).map(proj => {
+    const g = groups[proj].sort((a, b) => (invNum(a) - invNum(b)) || (a.date - b.date));
     const rate = rateOf(proj) * 100;
     let tot = 0, totVal = 0;
+    const invNos = [], invDates = [];
     const body = g.map((s, i) => {
       const raw = rawOf(s.id);
       const amt = toNum(raw['Invoice Amount']) || Math.round(s.value * rateOf(s.project));
       tot += amt; totVal += s.value;
-      return `<tr><td>${i + 1}</td><td>${esc(s.id)}</td><td>${ymdLocal(s.date)}</td><td>${esc(s.unit || '—')}</td><td>${esc(s.customer || '')}</td>
-        <td class="r">${fmt(s.value)}</td><td>${esc(raw['Invoice No'] || '—')}</td><td class="r">${fmt(amt)}</td></tr>`;
+      if (raw['Invoice No']) invNos.push(String(raw['Invoice No']));
+      if (raw['Invoice Date']) invDates.push(String(raw['Invoice Date']));
+      return `<tr><td class="c">${i + 1}</td><td>${esc(raw['Invoice No'] || '—')}</td><td>${esc(s.id)}</td><td>${dmy(ymdLocal(s.date))}</td>
+        <td>${esc(s.unit || '—')}</td><td>${esc(s.customer || '')}</td><td class="r">${inrFull_(s.value)}</td><td class="r">${(rateOf(s.project) * 100).toFixed(2)}%</td><td class="r">${inrFull_(amt)}</td></tr>`;
     }).join('');
-    grand += tot;
-    return `<h2>${esc(proj)} <span class="muted">· commission rate ${rate.toFixed(2)}%</span></h2>
-      <table><tr><th>#</th><th>Booking ID</th><th>Date</th><th>Unit</th><th>Customer</th><th class="r">Agreement value</th><th>Invoice no.</th><th class="r">Commission</th></tr>${body}
-      <tr class="total"><td colspan="5">Total — ${g.length} booking(s)</td><td class="r">${fmt(totVal)}</td><td></td><td class="r">${fmt(tot)}</td></tr></table>`;
-  }).join('');
-  const dates = rows.map(s => s.date).sort((a, b) => a - b);
-  w.document.write(`<!DOCTYPE html><html><head><title>Consolidated commission bill</title>
-<style>
-  body{font-family:Arial,Helvetica,sans-serif;padding:44px;color:#111}
-  h1{font-size:20px;margin-bottom:2px} h2{font-size:15px;margin:28px 0 0}
-  .muted{color:#666;font-size:12px;font-weight:400}
-  .head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:16px}
-  table{width:100%;border-collapse:collapse;margin-top:10px}
-  td,th{padding:8px 9px;border-bottom:1px solid #ddd;text-align:left;font-size:12.5px}
-  .r{text-align:right}
-  .total td{font-weight:700;border-top:2px solid #111}
-  .grand{margin-top:26px;text-align:right;font-size:16px;font-weight:700}
-</style></head><body>
+    const invRef = invNos.length === 0 ? '—' : (invNos.length === 1 ? invNos[0] : invNos[0] + ' to ' + invNos[invNos.length - 1]);
+    const invDate = invDates.length ? dmy(invDates.sort()[invDates.length - 1]) : dmy(ymdLocal(new Date()));
+    const dts = g.map(s => s.date).sort((a, b) => a - b);
+    return `<div class="page">
   <div class="head">
-    <div><h1>Mangalam Realtech</h1><div class="muted">Sales, Marketing &amp; Collections vertical of Mangalam Group</div></div>
-    <div style="text-align:right"><div class="muted"><b>Consolidated commission bill</b></div><div class="muted">Bookings from ${ymdLocal(dates[0])} to ${ymdLocal(dates[dates.length - 1])}</div><div class="muted">Printed on ${ymdLocal(new Date())}</div></div>
+    <div><div class="co">Mangalam Realtech</div><div class="muted">Sales, Marketing &amp; Collections vertical of Mangalam Group</div>
+      <div class="muted edit" contenteditable="true" data-ph="Company address · GSTIN · PAN (click to add)"></div></div>
+    <div class="title">COMMISSION INVOICE<div class="sub">Consolidated</div></div>
   </div>
-  ${sections}
-  <div class="grand">Grand total commission: ${fmt(grand)}</div>
-  <p class="muted" style="margin-top:34px">Generated from Business Pulse. Each booking keeps its own invoice number in the Sales_Log; this is a combined statement of those bills. Internal working record — reissue on company letterhead / your accounting system for a statutory tax invoice.</p>
-  <script>window.print()<\/script>
+  <table class="meta"><tr>
+    <td style="width:50%"><div class="lbl">Bill to</div><div class="edit big" contenteditable="true" data-ph="Click to add name &amp; address of the promoter / developer of ${esc(proj)}"></div></td>
+    <td><table class="kv">
+      <tr><th>Invoice no(s).</th><td>${esc(invRef)}</td></tr>
+      <tr><th>Invoice date</th><td>${esc(invDate)}</td></tr>
+      <tr><th>Project</th><td>${esc(proj)}</td></tr>
+      <tr><th>Bookings period</th><td>${dmy(ymdLocal(dts[0]))} to ${dmy(ymdLocal(dts[dts.length - 1]))}</td></tr>
+      <tr><th>Commission rate</th><td>${rate.toFixed(2)}% of agreement value</td></tr>
+    </table></td></tr></table>
+  <table class="items">
+    <tr><th class="c">Sr.</th><th>Invoice no.</th><th>Booking ID</th><th>Booking date</th><th>Unit</th><th>Customer</th><th class="r">Agreement value (₹)</th><th class="r">Rate</th><th class="r">Commission (₹)</th></tr>
+    ${body}
+    <tr class="total"><td colspan="6">Total — ${g.length} booking(s)</td><td class="r">${inrFull_(totVal)}</td><td></td><td class="r">${inrFull_(tot)}</td></tr>
+  </table>
+  <div class="words"><span class="lbl">Amount in words</span><br><b>${esc(rupeesInWords_(tot))}</b></div>
+  <table class="foot"><tr>
+    <td style="width:60%"><div class="lbl">Bank details / remarks</div><div class="edit" contenteditable="true" data-ph="Click to add bank name, account no., IFSC, remarks"></div></td>
+    <td class="sign"><div>For <b>Mangalam Realtech</b></div><div class="line">Authorised Signatory</div></td></tr></table>
+  <p class="muted note">This is a consolidated statement of the commission bills listed above; each booking keeps its own invoice number in the Sales_Log. Computer-generated working record — reissue on your accounting system for a statutory tax invoice.</p>
+</div>`;
+  }).join('');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Commission invoice</title>
+<style>
+  @page{size:A4 landscape;margin:12mm}
+  *{box-sizing:border-box}
+  body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;padding:24px;font-size:12.5px}
+  .bar{margin-bottom:16px}.bar button{padding:8px 18px;font-size:13px;cursor:pointer}
+  .page{page-break-after:always;max-width:1100px;margin:0 auto 30px}
+  .page:last-child{page-break-after:auto}
+  .head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:12px}
+  .co{font-size:22px;font-weight:700}
+  .title{text-align:right;font-size:20px;font-weight:700;letter-spacing:.06em}
+  .title .sub{font-size:11px;font-weight:400;letter-spacing:.1em;color:#555;margin-top:2px}
+  .muted{color:#666;font-size:11.5px}
+  .lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:#666}
+  .meta{width:100%;border-collapse:collapse;margin-top:14px}
+  .meta>tbody>tr>td{vertical-align:top;padding:8px 10px 8px 0}
+  .kv{width:100%;border-collapse:collapse}
+  .kv th{text-align:left;font-weight:600;color:#555;padding:3px 10px 3px 0;width:38%;font-size:12px}
+  .kv td{padding:3px 0;font-weight:600}
+  .items{width:100%;border-collapse:collapse;margin-top:14px}
+  .items th{background:#f1f1f1;border:1px solid #bbb;padding:7px 8px;font-size:11.5px;text-align:left}
+  .items td{border:1px solid #ccc;padding:6px 8px;font-size:12px}
+  .items .total td{font-weight:700;font-size:13px;background:#fafafa;border-top:2px solid #111}
+  .r{text-align:right;white-space:nowrap}.c{text-align:center}
+  .words{margin-top:14px;padding:10px 12px;border:1px solid #ccc}
+  .foot{width:100%;border-collapse:collapse;margin-top:14px}
+  .foot td{vertical-align:top;padding:8px 10px 8px 0}
+  .sign{text-align:right;padding-top:8px}
+  .sign .line{margin-top:46px;border-top:1px solid #111;display:inline-block;padding-top:4px;min-width:200px;text-align:center}
+  .edit{min-height:18px;outline:none}.edit.big{min-height:54px;font-size:13px}
+  .edit:empty:before{content:attr(data-ph);color:#aaa}
+  .note{margin-top:18px}
+  @media print{.bar{display:none}body{padding:0}.edit:empty:before{content:''}.edit:empty{min-height:0}}
+</style></head><body>
+  <div class="bar"><button onclick="window.print()">Print / Save as PDF</button> <span class="muted">Click the grey fields (Bill to, address, bank details) to type in them before printing.</span></div>
+  ${pages}
 </body></html>`);
   w.document.close();
 }
@@ -2529,9 +2602,9 @@ function printInvoice(bookingId) {
     <tr><th>Booking ID</th><td>${esc(bookingId)}</td></tr>
     <tr><th>Customer</th><td>${esc(s.customer||'')}</td></tr>
     <tr><th>Project</th><td>${esc(s.project)}</td></tr>
-    <tr><th>Agreement value (consideration)</th><td>${fmt(s.value)}</td></tr>
+    <tr><th>Agreement value (consideration)</th><td>${inrFull_(s.value)}</td></tr>
     <tr><th>Commission rate</th><td>${rate.toFixed(2)}%</td></tr>
-    <tr class="total"><th>Commission bill amount</th><td>${fmt(invoiceAmt)}</td></tr>
+    <tr class="total"><th>Commission bill amount</th><td>${inrFull_(invoiceAmt)}</td></tr>
   </table>
   <p class="muted" style="margin-top:34px">Generated from Business Pulse. This is a working record for internal tracking — reissue on company letterhead / your accounting system for a statutory tax invoice.</p>
   <script>window.print()<\/script>
