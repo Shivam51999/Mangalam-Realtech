@@ -307,6 +307,29 @@ body.role-viewer .wr{display:none!important}
   </div>
 </div>
 
+<!-- ═══ EDIT BOOKING ═══ -->
+<div class="modalbg" id="bkEditModal">
+  <div class="card logincard" style="max-width:640px;max-height:92vh;overflow-y:auto">
+    <h2>Edit booking <span id="beId" class="num" style="color:var(--muted);font-size:15px"></span></h2>
+    <div class="formgrid">
+      <div class="field"><label>Customer</label><input id="beCustomer" placeholder="Customer name"></div>
+      <div class="field"><label>Unit no.</label><input id="beUnit" placeholder="A-1203"></div>
+      <div class="field"><label>Source</label><select id="beSource"></select></div>
+      <div class="field"><label>Sub-source</label><input id="beSub" placeholder="CP firm / campaign / referrer"></div>
+      <div class="field"><label>Sales person</label>
+        <select id="bePerson"></select>
+        <input id="bePersonOther" placeholder="Type name" style="display:none;margin-top:6px">
+      </div>
+      <div class="field"><label>Date</label><input type="date" id="beDate"></div>
+      <div class="field"><label>Project</label><select id="beProject"></select></div>
+      <div class="field"><label>Agreement value (₹)</label><input type="number" id="beValue"></div>
+      <div class="field"><label>Amount received (₹)</label><input type="number" id="beReceived"></div>
+    </div>
+    <div class="msg" id="beMsg" style="margin-top:14px"></div>
+    <div class="row"><button class="btn" id="beSave">Save changes</button><button class="btn ghost" id="beCancel">Cancel</button></div>
+  </div>
+</div>
+
 <!-- ═══ SOURCE DATA (click-through) ═══ -->
 <div class="modalbg" id="drillModal">
   <div class="card drillcard">
@@ -723,7 +746,7 @@ body.role-viewer .wr{display:none!important}
       </div>
 
       <div class="card section">
-        <h3>All bookings — cancel, raise commission bill, mark received</h3>
+        <h3>All bookings — edit, cancel, raise commission bill (single or bulk), mark received</h3>
         <div class="filters" style="margin-bottom:16px">
           <div class="field"><label>From</label><input type="date" id="bkFrom"></div>
           <div class="field"><label>To</label><input type="date" id="bkTo"></div>
@@ -738,10 +761,16 @@ body.role-viewer .wr{display:none!important}
           <button class="btn ghost" id="bkClearFilters" style="align-self:flex-end">Clear filters</button>
         </div>
         <div class="grid kpis" id="bkSummary" style="margin-bottom:16px"></div>
+        <div class="wr" id="bkBulkBar" style="display:none;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;padding:10px 14px;border:1px solid rgba(240,188,82,.35);border-radius:12px;background:rgba(240,188,82,.06)">
+          <span id="bkBulkInfo" style="font-size:12.5px"></span>
+          <button class="btn" id="bkBulkRaise" style="padding:6px 14px;font-size:12px">Raise bills for selected</button>
+          <button class="btn ghost" id="bkBulkPrint" style="padding:6px 14px;font-size:12px">Print consolidated bill</button>
+          <button class="btn ghost" id="bkBulkClear" style="padding:6px 14px;font-size:12px">Clear selection</button>
+        </div>
         <div style="max-height:460px;overflow-y:auto;overflow-x:auto;border:1px solid var(--line);border-radius:12px">
           <table id="tblBookings"></table>
         </div>
-        <p class="hint" style="margin-top:10px">Status dropdown offers Booked / Agreement Done / Cancelled — change it to "Agreement Done" to unlock "Raise bill" on that row. Bill amount = agreement value × the project's commission rate (per-project, editable in the Projects tab). "Mark received" appears once a bill has been raised. <b>Commission due</b> / <b>Commission bill</b> are both about Realtech's own commission, not whether the customer has paid the developer — Due means the bill hasn't been received yet (whether or not it's been raised), Received means it has. Every status change updates the live Sales_Log immediately. This list shows the latest 300 bookings matching the filters above (the totals above count all of them) — narrow the filters to reach older ones; the top nav's FY/month/project filters don't apply here.</p>
+        <p class="hint" style="margin-top:10px">Status dropdown offers Booked / Agreement Done / Cancelled — change it to "Agreement Done" to unlock "Raise bill" on that row. Bill amount = agreement value × the project's commission rate (per-project, editable in the Projects tab). "Mark received" appears once a bill has been raised. <b>Commission due</b> / <b>Commission bill</b> are both about Realtech's own commission, not whether the customer has paid the developer — Due means the bill hasn't been received yet (whether or not it's been raised), Received means it has. <b>Edit</b> corrects customer name, source, unit, sales person, date, project and amounts on a booking (project and agreement value lock once a bill is raised, because the bill amount is based on them). <b>Bulk bills:</b> tick several bookings (the top box ticks every one that is ready to bill) and press <i>Raise bills for selected</i>; then press <i>Print consolidated bill</i> to get one combined statement per project for the month. Every status change updates the live Sales_Log immediately. This list shows the latest 300 bookings matching the filters above (the totals above count all of them) — narrow the filters to reach older ones; the top nav's FY/month/project filters don't apply here.</p>
       </div>
     </section>
 
@@ -2103,6 +2132,8 @@ function paymentStatusOf(s) {
 }
 
 const BK_CAP = 300;
+let BK_ROWS = [];          // bookings currently drawn in the table
+const BK_SEL = new Set();  // booking IDs ticked for bulk billing / consolidated print
 function renderBookingsList() {
   const tbl = $('tblBookings');
   if (!tbl) return;
@@ -2134,15 +2165,18 @@ function renderBookingsList() {
     ['Commission received', totalCommReceived, fmt]
   ].map(([l,v,f]) => `<div class="card kpi" style="padding:16px 18px"><div class="lbl">${l}</div><div class="val num" style="font-size:19px;margin-top:6px">${f(v)}</div></div>`).join('');
 
-  if (!rows.length) { tbl.innerHTML = '<tr><td class="empty">No bookings match these filters.</td></tr>'; return; }
-  const shown = rows.slice(0, BK_CAP);   // drawing thousands of table rows at once makes the page crawl
+  if (!rows.length) { tbl.innerHTML = '<tr><td class="empty">No bookings match these filters.</td></tr>'; BK_ROWS = []; updateBulkBar(); return; }
+  const shown = rows.slice(0, BK_CAP);
+  { const vis = new Set(shown.map(x => x.id)); [...BK_SEL].forEach(id => { if (!vis.has(id)) BK_SEL.delete(id); }); }   // drawing thousands of table rows at once makes the page crawl
   const billPill = b => b === 'Received' ? 'good' : b === 'Invoiced' ? 'warn' : '';
   const billLabel = b => b === 'Received' ? 'Commission received' : b === 'Invoiced' ? 'Bill raised' : b;
   const payPill = p => p === 'Paid' ? 'good' : 'warn';
   const payLabel = p => p === 'Paid' ? 'Received' : 'Due';
   const STATUS_OPTS = ['Booked','Agreement Done','Cancelled'];
   const thStyle = 'position:sticky;top:0;background:#0c1220;z-index:1';
-  tbl.innerHTML = `<tr><th style="${thStyle}">#</th><th style="${thStyle}">Booking</th><th style="${thStyle}">Date</th><th style="${thStyle}">Project</th><th style="${thStyle}">Unit</th><th style="${thStyle}">Customer</th><th style="${thStyle}">Sales person</th><th class="r" style="${thStyle}">Agreement value</th><th class="r" style="${thStyle}">Received</th><th style="${thStyle}">Commission due</th><th style="${thStyle}">Status</th><th style="${thStyle}">Commission bill</th><th class="r wr" style="min-width:210px;${thStyle}">Actions</th></tr>` +
+  BK_ROWS = shown;
+  const selAllChecked = shown.some(isBillable_) && shown.filter(isBillable_).every(x => BK_SEL.has(x.id));
+  tbl.innerHTML = `<tr><th class="wr" style="${thStyle};width:34px"><input type="checkbox" id="bkSelAll" title="Tick every booking that is ready to bill" ${selAllChecked?'checked':''} onchange="bkToggleAll(this.checked)"></th><th style="${thStyle}">#</th><th style="${thStyle}">Booking</th><th style="${thStyle}">Date</th><th style="${thStyle}">Project</th><th style="${thStyle}">Unit</th><th style="${thStyle}">Customer</th><th style="${thStyle}">Sales person</th><th class="r" style="${thStyle}">Agreement value</th><th class="r" style="${thStyle}">Received</th><th style="${thStyle}">Commission due</th><th style="${thStyle}">Status</th><th style="${thStyle}">Commission bill</th><th class="r wr" style="min-width:210px;${thStyle}">Actions</th></tr>` +
     shown.map((s, i) => {
       const canRaise = (s.status === 'Agreement Done' || s.status === 'Registered') && s.billStatus !== 'Invoiced' && s.billStatus !== 'Received';
       const canReceive = s.billStatus === 'Invoiced';
@@ -2151,7 +2185,9 @@ function renderBookingsList() {
       // legacy rows (Token / Registered) still need to display their true value even though
       // the dropdown only offers the 3 standard options going forward
       const opts = STATUS_OPTS.indexOf(s.status) === -1 ? [s.status, ...STATUS_OPTS] : STATUS_OPTS;
+      const canPick = !!s.id && (canRaise || canPrint);
       return `<tr>
+        <td class="wr">${canPick ? `<input type="checkbox" ${BK_SEL.has(s.id)?'checked':''} onchange="bkToggle('${esc(s.id)}', this.checked)">` : ''}</td>
         <td class="num">${i + 1}</td>
         <td class="num">${esc(s.id)}</td><td class="num">${ymdLocal(s.date)}</td>
         <td>${esc(s.project)}</td><td class="num">${esc(s.unit)||'—'}</td><td>${esc(s.customer)}</td><td>${esc(s.person)}</td>
@@ -2163,11 +2199,13 @@ function renderBookingsList() {
         </select>`}</td>
         <td>${s.billStatus ? `<span class="pill ${billPill(s.billStatus)}">${esc(billLabel(s.billStatus))}</span>` : '<span class="hint">Not raised</span>'}</td>
         <td class="r wr">
+          ${s.id ? `<button class="btn ghost" style="padding:5px 12px;font-size:11.5px;margin-right:6px" onclick="openBookingEdit('${esc(s.id)}')">Edit</button>` : ''}
           ${canRaise ? `<button class="btn ghost" style="padding:5px 12px;font-size:11.5px" onclick="raiseBill('${esc(s.id)}')">Raise bill</button>` : ''}
           ${canReceive ? `<button class="btn ghost" style="padding:5px 12px;font-size:11.5px;margin-left:6px;color:var(--jade);border-color:rgba(60,228,164,.4)" onclick="markReceived('${esc(s.id)}')">Mark received</button>` : ''}
           ${canPrint ? `<button class="btn ghost" style="padding:5px 12px;font-size:11.5px;margin-left:6px" onclick="printInvoice('${esc(s.id)}')">Invoice</button>` : ''}
         </td></tr>`;
-    }).join('') + (rows.length > shown.length ? `<tr><td colspan="13" class="hint">Showing the latest ${shown.length} of ${rows.length} matching bookings (the totals above count all ${rows.length}). Narrow the filters to see older ones.</td></tr>` : '');
+    }).join('') + (rows.length > shown.length ? `<tr><td colspan="14" class="hint">Showing the latest ${shown.length} of ${rows.length} matching bookings (the totals above count all ${rows.length}). Narrow the filters to see older ones.</td></tr>` : '');
+  updateBulkBar();
 }
 
 ['bkFrom','bkTo','bkProjectFilter','bkStatusFilter','bkPaymentFilter'].forEach(id => {
@@ -2190,6 +2228,209 @@ $('bkClearFilters').onclick = () => {
   $('bkStatusFilter').value = 'all'; $('bkPaymentFilter').value = 'all';
   renderBookingsList();
 };
+
+
+/* ════════════════ EDIT A BOOKING ════════════════ */
+let bkEdit = null;   // { id, orig:{…}, locked, srcWas }
+function openBookingEdit(bookingId) {
+  const s = normSales().find(x => x.id === bookingId);
+  if (!s) return toast('Booking not found');
+  const locked = s.billStatus === 'Invoiced' || s.billStatus === 'Received';
+  const projNames = PJ().map(p => p.name);
+  if (s.project && projNames.every(n => nrm(n) !== nrm(s.project))) projNames.push(s.project);
+  $('beProject').innerHTML = projNames.map(n => `<option ${nrm(n)===nrm(s.project)?'selected':''}>${esc(n)}</option>`).join('');
+  const srcList = (DB.sources || []).slice();
+  if (s.source && srcList.every(x => nrm(x) !== nrm(s.source))) srcList.push(s.source);
+  $('beSource').innerHTML = srcList.map(x => `<option ${nrm(x)===nrm(s.source)?'selected':''}>${esc(x)}</option>`).join('');
+  let perOpts = roleTaggedOptions('sales', s.person);
+  if (s.person && perOpts.indexOf(`value="${esc(s.person)}"`) === -1)
+    perOpts += `<option value="${esc(s.person)}" selected>${esc(s.person)}</option>`;
+  $('bePerson').innerHTML = perOpts + '<option value="__other__">Other (type name)</option>';
+  $('bePerson').value = s.person || '';
+  $('bePersonOther').value = ''; $('bePersonOther').style.display = 'none';
+  $('beId').textContent = bookingId;
+  $('beCustomer').value = s.customer; $('beUnit').value = s.unit; $('beSub').value = s.sub || '';
+  $('beDate').value = ymdLocal(s.date);
+  $('beValue').value = s.value || ''; $('beReceived').value = s.received || '';
+  ['beProject', 'beValue'].forEach(id => { $(id).disabled = locked; });
+  $('beMsg').textContent = locked
+    ? 'A commission bill is already raised on this booking, so project and agreement value are locked. Everything else can be corrected.'
+    : '';
+  bkEdit = { id: bookingId, locked, srcWas: canonSource($('beSource').value), orig: {
+    customer: $('beCustomer').value, unit: $('beUnit').value, source: $('beSource').value, sub: $('beSub').value,
+    person: $('bePerson').value, date: $('beDate').value, project: $('beProject').value,
+    value: $('beValue').value, received: $('beReceived').value } };
+  $('bkEditModal').classList.add('show');
+  $('beCustomer').focus();
+}
+$('bePerson').addEventListener('change', () => {
+  $('bePersonOther').style.display = $('bePerson').value === '__other__' ? '' : 'none';
+});
+$('beCancel').onclick = () => { $('bkEditModal').classList.remove('show'); bkEdit = null; };
+$('beSave').onclick = async function() {
+  if (!bkEdit) return;
+  const o = bkEdit.orig;
+  const person = $('bePerson').value === '__other__' ? $('bePersonOther').value.trim() : $('bePerson').value;
+  const cur = { customer: $('beCustomer').value.trim(), unit: $('beUnit').value.trim(), source: $('beSource').value,
+    sub: $('beSub').value.trim(), person, date: $('beDate').value, project: $('beProject').value,
+    value: $('beValue').value, received: $('beReceived').value };
+  if (!cur.date) return ($('beMsg').textContent = 'Date is required');
+  if (!cur.project) return ($('beMsg').textContent = 'Project is required');
+  if (!(Number(cur.value) > 0)) return ($('beMsg').textContent = 'Agreement value must be more than zero');
+  if (!cur.person) return ($('beMsg').textContent = 'Pick a sales person (or choose "Other" and type the name)');
+  // send only what actually changed, so nothing else on the row is touched
+  const p = { action: 'updateSale', bookingId: bkEdit.id };
+  const map = { customer:'customer', unit:'unit', source:'source', sub:'subSource', person:'salesPerson',
+                date:'date', project:'project', value:'agreementValue', received:'amountReceived' };
+  let n = 0;
+  Object.keys(map).forEach(k => { if (String(cur[k]).trim() !== String(o[k]).trim()) { p[map[k]] = cur[k]; n++; } });
+  if (!n) { $('bkEditModal').classList.remove('show'); bkEdit = null; return toast('No changes to save'); }
+  // a payout that only applies to the old source must not linger on the row
+  if (p.source !== undefined) {
+    const was = bkEdit.srcWas, now = canonSource(cur.source);
+    if (was === 'Channel Partner' && now !== 'Channel Partner') { p.brokerage = ''; p.cpIncentive = ''; }
+    if (was === 'Referral' && now !== 'Referral') p.referralPayout = '';
+  }
+  const id = bkEdit.id;
+  this.disabled = true;
+  try {
+    if (CONFIG.API_URL) {
+      const r = await apiPost(p);
+      if (r.error) throw new Error(r.error);
+      /* the save reply already carried the refreshed table */
+    } else {
+      const row = DB.sales.find(x => String(x['Booking ID']||'').trim() === String(id).trim());
+      if (row) {
+        if (p.customer !== undefined) row['Customer'] = p.customer;
+        if (p.unit !== undefined) row['Unit'] = p.unit;
+        if (p.source !== undefined) { row['Source'] = p.source; if (p.brokerage !== undefined) { row['CP Brokerage'] = ''; row['CP Incentive'] = ''; } if (p.referralPayout !== undefined) row['Referral Payout'] = ''; }
+        if (p.subSource !== undefined) row['Sub-Source'] = p.subSource;
+        if (p.salesPerson !== undefined) row['Sales Person'] = p.salesPerson;
+        if (p.date !== undefined) row['Date'] = p.date;
+        if (p.project !== undefined) row['Project'] = p.project;
+        if (p.agreementValue !== undefined) row['Agreement Value'] = p.agreementValue;
+        if (p.amountReceived !== undefined) row['Amount Received'] = p.amountReceived;
+      }
+    }
+    $('bkEditModal').classList.remove('show'); bkEdit = null;
+    toast(id + ' updated');
+    renderAll();
+  } catch (e) {
+    $('beMsg').textContent = 'Failed: ' + e.message;
+  }
+  this.disabled = false;
+};
+
+/* ════════════════ BULK BILLS ════════════════ */
+function isBillable_(s) {
+  return !!s.id && (s.status === 'Agreement Done' || s.status === 'Registered') && s.billStatus !== 'Invoiced' && s.billStatus !== 'Received';
+}
+function isBilled_(s) { return !!s.id && (s.billStatus === 'Invoiced' || s.billStatus === 'Received'); }
+function bkToggle(id, on) { if (on) BK_SEL.add(id); else BK_SEL.delete(id); updateBulkBar(); }
+function bkToggleAll(on) {
+  BK_ROWS.filter(isBillable_).forEach(s => { if (on) BK_SEL.add(s.id); else BK_SEL.delete(s.id); });
+  renderBookingsList();
+}
+function bkSelected_() { return BK_ROWS.filter(s => BK_SEL.has(s.id)); }
+function updateBulkBar() {
+  const bar = $('bkBulkBar'); if (!bar) return;
+  const sel = bkSelected_();
+  const toRaise = sel.filter(isBillable_), billed = sel.filter(isBilled_);
+  bar.style.display = sel.length ? 'flex' : 'none';
+  const amt = toRaise.reduce((a, s) => a + Math.round(s.value * rateOf(s.project)), 0);
+  $('bkBulkInfo').innerHTML = `<b>${sel.length}</b> selected` +
+    (toRaise.length ? ` · <b>${toRaise.length}</b> ready to bill (${fmt(amt)})` : '') +
+    (billed.length ? ` · <b>${billed.length}</b> already billed` : '');
+  $('bkBulkRaise').style.display = toRaise.length ? '' : 'none';
+  $('bkBulkPrint').style.display = billed.length ? '' : 'none';
+  const all = $('bkSelAll');
+  if (all) { const b = BK_ROWS.filter(isBillable_); all.checked = b.length > 0 && b.every(s => BK_SEL.has(s.id)); }
+}
+$('bkBulkClear').onclick = () => { BK_SEL.clear(); renderBookingsList(); };
+
+$('bkBulkRaise').onclick = async function() {
+  const list = bkSelected_().filter(isBillable_).map(s => ({ id: s.id, customer: s.customer, project: s.project, value: s.value,
+    amount: Math.round(s.value * rateOf(s.project)) }));
+  if (!list.length) return toast('Nothing selected is ready to bill');
+  const byProj = {};
+  list.forEach(x => { const o = byProj[x.project] = byProj[x.project] || { n: 0, amt: 0 }; o.n++; o.amt += x.amount; });
+  const total = list.reduce((a, x) => a + x.amount, 0);
+  const lines = Object.keys(byProj).map(k => `• ${k}: ${byProj[k].n} booking(s) — ${fmt(byProj[k].amt)}`).join('\n');
+  if (!confirm(`Raise commission bills for ${list.length} bookings?\n\n${lines}\n\nTotal bill amount: ${fmt(total)}\n\nEach booking gets its own invoice number in the Sales_Log; afterwards you can print one consolidated bill.`)) return;
+  this.disabled = true;
+  const done = [], failed = [];
+  for (let i = 0; i < list.length; i++) {
+    const x = list[i];
+    toast(`Raising bills… ${i + 1} of ${list.length}`);
+    try {
+      if (CONFIG.API_URL) {
+        const r = await apiPost({ action: 'raiseInvoice', bookingId: x.id, amount: x.amount });
+        if (r.error) throw new Error(r.error);
+      } else {
+        const row = DB.sales.find(r => String(r['Booking ID']||'').trim() === String(x.id).trim());
+        if (row) { row['Bill Status']='Invoiced'; row['Invoice No']='INV-DEMO'; row['Invoice Date']=ymdLocal(new Date()); row['Invoice Amount']=x.amount; }
+      }
+      done.push(x.id);
+    } catch (e) { failed.push(x.id + ' (' + e.message + ')'); }
+  }
+  this.disabled = false;
+  renderAll();
+  if (failed.length) alert(`${done.length} bill(s) raised.\n\n${failed.length} failed — nothing was changed for these, you can retry them:\n${failed.join('\n')}`);
+  else toast(`${done.length} bills raised — press “Print consolidated bill” for the combined statement`);
+};
+
+$('bkBulkPrint').onclick = () => printConsolidated(bkSelected_().filter(isBilled_).map(s => s.id));
+
+function printConsolidated(ids) {
+  const all = normSales();
+  const rows = ids.map(id => all.find(x => x.id === id)).filter(Boolean);
+  if (!rows.length) return toast('Select bookings that already have a bill raised');
+  const w = window.open('', '_blank');
+  if (!w) return toast('Allow pop-ups to view the bill');
+  const rawOf = id => (DB.sales || []).find(r => String(r['Booking ID']||'').trim() === String(id).trim()) || {};
+  const groups = {};
+  rows.forEach(s => { (groups[s.project] = groups[s.project] || []).push(s); });
+  let grand = 0;
+  const sections = Object.keys(groups).map(proj => {
+    const g = groups[proj].sort((a, b) => a.date - b.date);
+    const rate = rateOf(proj) * 100;
+    let tot = 0, totVal = 0;
+    const body = g.map((s, i) => {
+      const raw = rawOf(s.id);
+      const amt = toNum(raw['Invoice Amount']) || Math.round(s.value * rateOf(s.project));
+      tot += amt; totVal += s.value;
+      return `<tr><td>${i + 1}</td><td>${esc(s.id)}</td><td>${ymdLocal(s.date)}</td><td>${esc(s.unit || '—')}</td><td>${esc(s.customer || '')}</td>
+        <td class="r">${fmt(s.value)}</td><td>${esc(raw['Invoice No'] || '—')}</td><td class="r">${fmt(amt)}</td></tr>`;
+    }).join('');
+    grand += tot;
+    return `<h2>${esc(proj)} <span class="muted">· commission rate ${rate.toFixed(2)}%</span></h2>
+      <table><tr><th>#</th><th>Booking ID</th><th>Date</th><th>Unit</th><th>Customer</th><th class="r">Agreement value</th><th>Invoice no.</th><th class="r">Commission</th></tr>${body}
+      <tr class="total"><td colspan="5">Total — ${g.length} booking(s)</td><td class="r">${fmt(totVal)}</td><td></td><td class="r">${fmt(tot)}</td></tr></table>`;
+  }).join('');
+  const dates = rows.map(s => s.date).sort((a, b) => a - b);
+  w.document.write(`<!DOCTYPE html><html><head><title>Consolidated commission bill</title>
+<style>
+  body{font-family:Arial,Helvetica,sans-serif;padding:44px;color:#111}
+  h1{font-size:20px;margin-bottom:2px} h2{font-size:15px;margin:28px 0 0}
+  .muted{color:#666;font-size:12px;font-weight:400}
+  .head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:16px}
+  table{width:100%;border-collapse:collapse;margin-top:10px}
+  td,th{padding:8px 9px;border-bottom:1px solid #ddd;text-align:left;font-size:12.5px}
+  .r{text-align:right}
+  .total td{font-weight:700;border-top:2px solid #111}
+  .grand{margin-top:26px;text-align:right;font-size:16px;font-weight:700}
+</style></head><body>
+  <div class="head">
+    <div><h1>Mangalam Realtech</h1><div class="muted">Sales, Marketing &amp; Collections vertical of Mangalam Group</div></div>
+    <div style="text-align:right"><div class="muted"><b>Consolidated commission bill</b></div><div class="muted">Bookings from ${ymdLocal(dates[0])} to ${ymdLocal(dates[dates.length - 1])}</div><div class="muted">Printed on ${ymdLocal(new Date())}</div></div>
+  </div>
+  ${sections}
+  <div class="grand">Grand total commission: ${fmt(grand)}</div>
+  <p class="muted" style="margin-top:34px">Generated from Business Pulse. Each booking keeps its own invoice number in the Sales_Log; this is a combined statement of those bills. Internal working record — reissue on company letterhead / your accounting system for a statutory tax invoice.</p>
+  <script>window.print()<\/script>
+</body></html>`);
+  w.document.close();
+}
 
 /** Shared write for any status transition — used by the status dropdown. */
 async function applyBookingStatus_(bookingId, status) {
