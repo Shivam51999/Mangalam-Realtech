@@ -3111,7 +3111,7 @@ function renderCharts(A) {
     type:'doughnut',
     data:{ labels: entries.map(([n])=>n),
       datasets:[{ data: entries.map(([,v])=>v.bookings),
-        backgroundColor:['#F0BC52','#3CE4A4','#5BE3FF','#A18BFF','#F2B650','#FF6F62'],
+        backgroundColor: entries.map(([n], i) => ({ 'Hoarding':'#F0BC52', 'Digital Marketing':'#3CE4A4', 'Channel Partner':'#5BE3FF', 'Referral':'#A18BFF', 'Direct Walk-in':'#FF6F62' })[n] || ['#7C93FF','#FF9FCB','#B6E35B','#FFFFFF'][i % 4]),
         borderColor:'#0A0F1E', borderWidth:3, hoverOffset:8 }]},
     options:{ maintainAspectRatio:false, cutout:'68%',
       plugins:{ legend:{position:'bottom', labels:{usePointStyle:true, pointStyle:'circle', boxWidth:7, padding:14}},
